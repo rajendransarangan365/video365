@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="96"
+    android:viewportHeight="96">
+    <!-- Rounded Studio Obsidian Base -->
+    <path
+        android:fillColor="#151922"
+        android:pathData="M16,0 L80,0 A16,16 0 0,1 96,16 L96,80 A16,16 0 0,1 80,96 L16,96 A16,16 0 0,1 0,80 L0,16 A16,16 0 0,1 16,0 Z" />
+
+    <!-- Outer 360/365 Motion Orbit Ring in Electric Cyan -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#00E5FF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M30,26 C35,23 41,21 48,21 C62.9,21 75,33.1 75,48 C75,58 69.5,66.7 61.5,71.3" />
+    
+    <!-- Lower Counter-Orbit in Creative Purple/Magenta -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#7C4DFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M66,70 C61,73 55,75 48,75 C33.1,75 21,62.9 21,48 C21,38.9 25.5,30.9 32.5,26.2" />
+
+    <!-- Dynamic Studio Play Facet Left (Electric Cyan / Teal) -->
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M38,32 L60,48 L38,48 Z" />
+
+    <!-- Dynamic Studio Play Facet Right (Creative Magenta / Violet) -->
+    <path
+        android:fillColor="#7C4DFF"
+        android:pathData="M38,48 L60,48 L38,64 Z" />
+
+    <!-- Core Center Specular Highlight -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M46,45 C47.7,45 49,46.3 49,48 C49,49.7 47.7,51 46,51 C44.3,51 43,49.7 43,48 C43,46.3 44.3,45 46,45 Z" />
+</vector>

@@ -13,6 +13,10 @@ import com.google.gson.JsonSerializationContext
 import com.google.gson.JsonSerializer
 import com.tharunbirla.librecuts.models.EditOperation
 import com.tharunbirla.librecuts.models.EditRecipe
+import com.tharunbirla.librecuts.models.v2.Video365Project
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import java.io.File
 import java.lang.reflect.Type
 
 object ProjectSerializer {
@@ -140,5 +144,28 @@ object ProjectSerializer {
             it is EditOperation.MuteAudio && (it.id.startsWith("skipped_unknown_") || it.id.startsWith("skipped_failed_"))
         }
         return recipe.copy(operations = sanitizedOps)
+    }
+
+    // Video365 Project Format v2.0
+    private val v2Json = Json {
+        prettyPrint = true
+        ignoreUnknownKeys = true
+        encodeDefaults = true
+    }
+
+    fun serialize(project: Video365Project): String {
+        return v2Json.encodeToString(project)
+    }
+
+    fun deserializeVideo365(jsonString: String): Video365Project {
+        return v2Json.decodeFromString(jsonString)
+    }
+
+    fun saveToFile(project: Video365Project, file: File) {
+        file.writeText(serialize(project))
+    }
+
+    fun loadFromFile(file: File): Video365Project {
+        return deserializeVideo365(file.readText())
     }
 }

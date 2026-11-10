@@ -31,10 +31,10 @@
 
                 <ImageView
                     android:id="@+id/ivOnboardingLogo"
-                    android:layout_width="72dp"
-                    android:layout_height="72dp"
-                    android:src="@mipmap/ic_launcher"
-                    android:contentDescription="LibreCuts App Icon" />
+                    android:layout_width="80dp"
+                    android:layout_height="80dp"
+                    android:src="@drawable/ic_video365_logo"
+                    android:contentDescription="@string/app_name" />
 
                 <TextView
                     android:id="@+id/tvOnboardingTitle"

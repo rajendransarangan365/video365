@@ -32,7 +32,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Video Editor"
+                android:text="Motion Graphics &amp; Video Studio"
                 android:textColor="@color/iconSecondary"
                 android:textSize="11sp"
                 android:fontFamily="sans-serif" />
@@ -175,6 +175,74 @@
 
             </LinearLayout>
 
+            <!-- Bento Card: Live Demo Project -->
+            <LinearLayout
+                android:id="@+id/btnLiveDemoProject"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="110dp"
+                android:layout_marginTop="16dp"
+                android:background="@drawable/bg_hero_bento_secondary"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                android:gravity="center_vertical"
+                android:orientation="vertical"
+                android:padding="20dp"
+                android:elevation="4dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Live Demo Project"
+                    android:textColor="@color/textColor"
+                    android:textSize="18sp"
+                    android:fontFamily="sans-serif-medium" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Real 4K/1080p footage, GLSL transitions, expressions &amp; Lumetri grade"
+                    android:textColor="@color/iconSecondary"
+                    android:textSize="13sp"
+                    android:fontFamily="sans-serif" />
+            </LinearLayout>
+
+            <!-- Bento Card: How to Use Video365 -->
+            <LinearLayout
+                android:id="@+id/btnHowToUseHome"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="100dp"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_hero_bento_secondary"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                android:gravity="center_vertical"
+                android:orientation="vertical"
+                android:padding="20dp"
+                android:elevation="4dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="How to Use Video365"
+                    android:textColor="@color/textColor"
+                    android:textSize="18sp"
+                    android:fontFamily="sans-serif-medium" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Interactive guide to timeline, GPU shaders, and thermal auto-proxies"
+                    android:textColor="@color/iconSecondary"
+                    android:textSize="13sp"
+                    android:fontFamily="sans-serif" />
+            </LinearLayout>
+
             <!-- App Tagline -->
             <TextView
                 android:layout_width="wrap_content"
@@ -299,7 +367,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
-                        android:text="@string/str_default_movies_librecuts"
+                        android:text="@string/str_default_movies_video365"
                         android:textColor="@color/iconSecondary"
                         android:textSize="13sp" />
                 </LinearLayout>
@@ -334,7 +402,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
-                        android:text="@string/str_default_music_librecuts"
+                        android:text="@string/str_default_music_video365"
                         android:textColor="@color/iconSecondary"
                         android:textSize="13sp" />
                 </LinearLayout>
@@ -369,7 +437,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
-                        android:text="@string/str_default_pictures_librecuts"
+                        android:text="@string/str_default_pictures_video365"
                         android:textColor="@color/iconSecondary"
                         android:textSize="13sp" />
                 </LinearLayout>
@@ -603,9 +671,10 @@
                 android:elevation="8dp">
 
                 <ImageView
-                    android:layout_width="72dp"
-                    android:layout_height="72dp"
-                    android:src="@mipmap/ic_launcher_round" />
+                    android:layout_width="80dp"
+                    android:layout_height="80dp"
+                    android:src="@drawable/ic_video365_logo"
+                    android:contentDescription="@string/app_name" />
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -663,7 +732,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
                     android:gravity="center"
-                    android:text="@string/str_librecuts_is_open_source_help"
+                    android:text="@string/str_video365_is_open_source_help"
                     android:textColor="@color/iconSecondary"
                     android:textSize="13sp" />
 
@@ -697,7 +766,7 @@
                     app:cornerRadius="14dp"
                     android:textSize="14sp"
                     android:fontFamily="sans-serif-medium"
-                    app:icon="@drawable/ic_translate_24"
+                    app:icon="@drawable/ic_guide_24"
                     app:iconTint="@color/textColor"
                     app:iconGravity="textStart"
                     android:insetTop="0dp"

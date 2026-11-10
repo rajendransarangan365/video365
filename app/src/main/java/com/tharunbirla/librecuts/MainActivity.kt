@@ -18,9 +18,11 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import android.os.Parcelable
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.compose.ui.platform.ComposeView
 import androidx.core.os.LocaleListCompat
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.tharunbirla.librecuts.databinding.ActivityMainBinding
+import com.tharunbirla.librecuts.ui.ProjectCreationDialog
 import com.tharunbirla.librecuts.utils.ErrorCode
 import com.tharunbirla.librecuts.utils.setBounceClickListener
 import androidx.lifecycle.lifecycleScope
@@ -34,6 +36,8 @@ import java.net.URL
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
+    private var pendingVideoUri: Uri? = null
+
     private val selectVideoLauncher =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
             if (uri != null) {
@@ -43,12 +47,39 @@ class MainActivity : AppCompatActivity() {
                 } catch (e: Exception) {
                     Log.e("VideoSelection", "Could not take persistable permission", e)
                 }
-                Log.d("VideoSelection", "Video selected: $uri")
-                navigateToEditingScreen(uri)
-            } else {
-                Log.e("VideoSelectionError", "No video selected")
+                pendingVideoUri = uri
+                showRatioSelector(uri)
             }
         }
+
+    private fun showRatioSelector(uri: Uri) {
+        val dialogView = ComposeView(this).apply {
+            setContent {
+                ProjectCreationDialog(
+                    onDismiss = { 
+                        // Logic to close dialog
+                    },
+                    onConfirm = { option ->
+                        navigateToVideo365Editor(uri, option.ratio)
+                    }
+                )
+            }
+        }
+        
+        MaterialAlertDialogBuilder(this)
+            .setView(dialogView)
+            .show()
+    }
+
+    private fun navigateToVideo365Editor(uri: Uri, ratio: String) {
+        val intent = Intent(this, Video365EditingActivity::class.java).apply {
+            putExtra("VIDEO_URI", uri)
+            putExtra("ASPECT_RATIO", ratio)
+            data = uri
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(intent)
+    }
 
     private val openProjectLauncher =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
@@ -65,8 +96,6 @@ class MainActivity : AppCompatActivity() {
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
                 }
                 startActivity(intent)
-            } else {
-                Log.e("ProjectSelectionError", "No project selected")
             }
         }
 
@@ -80,7 +109,7 @@ class MainActivity : AppCompatActivity() {
 
                     val prefs = getSharedPreferences("librecuts_prefs", MODE_PRIVATE)
                     prefs.edit().putString("export_directory_uri", uri.toString()).apply()
-                    updateExportFolderUI(uri, binding.tvCurrentExportFolder, R.string.str_default_movies_librecuts)
+                    updateExportFolderUI(uri, binding.tvCurrentExportFolder, R.string.str_default_movies_video365)
                 } catch (e: Exception) {
                     Log.e("FolderSelectionError", "Error securing permission for URI", e)
                     showToast(getString(R.string.toast_failed_to_set_export_folder))
@@ -98,7 +127,7 @@ class MainActivity : AppCompatActivity() {
 
                     val prefs = getSharedPreferences("librecuts_prefs", MODE_PRIVATE)
                     prefs.edit().putString("export_audio_directory_uri", uri.toString()).apply()
-                    updateExportFolderUI(uri, binding.tvCurrentAudioExportFolder, R.string.str_default_music_librecuts)
+                    updateExportFolderUI(uri, binding.tvCurrentAudioExportFolder, R.string.str_default_music_video365)
                 } catch (e: Exception) {
                     Log.e("FolderSelectionError", "Error securing permission for URI", e)
                     showToast(getString(R.string.toast_failed_to_set_export_folder))
@@ -116,7 +145,7 @@ class MainActivity : AppCompatActivity() {
 
                     val prefs = getSharedPreferences("librecuts_prefs", MODE_PRIVATE)
                     prefs.edit().putString("export_snapshot_directory_uri", uri.toString()).apply()
-                    updateExportFolderUI(uri, binding.tvCurrentSnapshotExportFolder, R.string.str_default_pictures_librecuts)
+                    updateExportFolderUI(uri, binding.tvCurrentSnapshotExportFolder, R.string.str_default_pictures_video365)
                 } catch (e: Exception) {
                     Log.e("FolderSelectionError", "Error securing permission for URI", e)
                     showToast(getString(R.string.toast_failed_to_set_export_folder))
@@ -137,6 +166,15 @@ class MainActivity : AppCompatActivity() {
         binding.btnOpenProject.setBounceClickListener {
             Log.d("ButtonClick", "Launching project selection.")
             openProjectLauncher.launch(arrayOf("*/*"))
+        }
+
+        binding.btnLiveDemoProject.setBounceClickListener {
+            val sampleUri = com.tharunbirla.librecuts.engine.SampleVideo365Project.getOrExtractSampleVideo(this)
+            navigateToVideo365Editor(sampleUri, "9:16")
+        }
+
+        binding.btnHowToUseHome.setBounceClickListener {
+            showHowToUseDialog()
         }
 
         // Initialize bottom navigation tab backgrounds
@@ -189,23 +227,23 @@ class MainActivity : AppCompatActivity() {
         val prefs = getSharedPreferences("librecuts_prefs", MODE_PRIVATE)
         val savedUriString = prefs.getString("export_directory_uri", null)
         if (savedUriString != null) {
-            updateExportFolderUI(Uri.parse(savedUriString), binding.tvCurrentExportFolder, R.string.str_default_movies_librecuts)
+            updateExportFolderUI(Uri.parse(savedUriString), binding.tvCurrentExportFolder, R.string.str_default_movies_video365)
         } else {
-            updateExportFolderUI(null, binding.tvCurrentExportFolder, R.string.str_default_movies_librecuts)
+            updateExportFolderUI(null, binding.tvCurrentExportFolder, R.string.str_default_movies_video365)
         }
 
         val savedAudioUriString = prefs.getString("export_audio_directory_uri", null)
         if (savedAudioUriString != null) {
-            updateExportFolderUI(Uri.parse(savedAudioUriString), binding.tvCurrentAudioExportFolder, R.string.str_default_music_librecuts)
+            updateExportFolderUI(Uri.parse(savedAudioUriString), binding.tvCurrentAudioExportFolder, R.string.str_default_music_video365)
         } else {
-            updateExportFolderUI(null, binding.tvCurrentAudioExportFolder, R.string.str_default_music_librecuts)
+            updateExportFolderUI(null, binding.tvCurrentAudioExportFolder, R.string.str_default_music_video365)
         }
 
         val savedSnapshotUriString = prefs.getString("export_snapshot_directory_uri", null)
         if (savedSnapshotUriString != null) {
-            updateExportFolderUI(Uri.parse(savedSnapshotUriString), binding.tvCurrentSnapshotExportFolder, R.string.str_default_pictures_librecuts)
+            updateExportFolderUI(Uri.parse(savedSnapshotUriString), binding.tvCurrentSnapshotExportFolder, R.string.str_default_pictures_video365)
         } else {
-            updateExportFolderUI(null, binding.tvCurrentSnapshotExportFolder, R.string.str_default_pictures_librecuts)
+            updateExportFolderUI(null, binding.tvCurrentSnapshotExportFolder, R.string.str_default_pictures_video365)
         }
 
         updateLanguageUI()
@@ -243,18 +281,18 @@ class MainActivity : AppCompatActivity() {
             binding.tvAboutVersion.text = "v1.0-beta5"
         }
 
-        // Setup GitHub and Translation button listeners
+        // Setup GitHub, Instructions Guide, Bug Report, and Sponsor listeners
         binding.btnStarGithub.setBounceClickListener {
-            openUrl("https://github.com/tharunbirla/LibreCuts")
+            openUrl("https://github.com/rajendransarangan365/video365.git")
         }
         binding.btnTranslate.setBounceClickListener {
-            openUrl("https://hosted.weblate.org/engage/librecuts/")
+            showHowToUseDialog()
         }
         binding.btnReportBug.setBounceClickListener {
-            openUrl("https://github.com/tharunbirla/LibreCuts/issues")
+            openUrl("https://github.com/rajendransarangan365/video365/issues")
         }
         binding.btnSponsor.setBounceClickListener {
-            openUrl("https://github.com/sponsors/tharunbirla")
+            openUrl("https://github.com/sponsors/rajendransarangan365")
         }
 
         // Onboarding / Welcome Dialog
@@ -540,7 +578,7 @@ class MainActivity : AppCompatActivity() {
                 } catch (e: Exception) {
                     Log.d("VideoSelection", "Could not take persistable permission: ${e.message}")
                 }
-                navigateToEditingScreen(uri)
+                showRatioSelector(uri)
             }
             onBrowseSystemFoldersRequested = {
                 selectVideoLauncher.launch(arrayOf("video/*", "image/*"))
@@ -574,14 +612,14 @@ class MainActivity : AppCompatActivity() {
             if (type.startsWith("video/") || type.startsWith("image/")) {
                 (intent.getParcelableExtra<Parcelable>(Intent.EXTRA_STREAM) as? Uri)?.let { uri ->
                     Log.d("SharedVideo", "Received SEND intent with media URI: $uri")
-                    navigateToEditingScreen(uri)
+                    showRatioSelector(uri)
                 }
             }
         } else if ((Intent.ACTION_VIEW == action || Intent.ACTION_EDIT == action) && type != null) {
             if (type.startsWith("video/") || type.startsWith("image/")) {
                 intent.data?.let { uri ->
                     Log.d("SharedVideo", "Received VIEW/EDIT intent with media URI: $uri")
-                    navigateToEditingScreen(uri)
+                    showRatioSelector(uri)
                 }
             }
         }
@@ -614,19 +652,19 @@ class MainActivity : AppCompatActivity() {
         }
 
         view.findViewById<View>(R.id.layoutStarGithub)?.setBounceClickListener {
-            openUrl("https://github.com/tharunbirla/LibreCuts")
+            openUrl("https://github.com/rajendransarangan365/video365.git")
         }
 
         view.findViewById<View>(R.id.layoutSponsorGithub)?.setBounceClickListener {
-            openUrl("https://github.com/sponsors/tharunbirla")
+            openUrl("https://github.com/sponsors/rajendransarangan365")
         }
 
         view.findViewById<View>(R.id.layoutDiscord)?.setBounceClickListener {
-            openUrl("https://discord.gg/gwr3nE7YW")
+            openUrl("https://github.com/rajendransarangan365/video365")
         }
 
         view.findViewById<View>(R.id.layoutTroubleshooting)?.setBounceClickListener {
-            openUrl("https://github.com/tharunbirla/LibreCuts/wiki/Error-Codes-&-Troubleshooting")
+            openUrl("https://github.com/rajendransarangan365/video365#readme")
         }
 
         view.findViewById<View>(R.id.btnOnboardingGetStarted)?.setBounceClickListener {
@@ -644,6 +682,27 @@ class MainActivity : AppCompatActivity() {
 
     private fun checkForUpdates() {
         showToast("Checking for updates in browser...")
-        openUrl("https://github.com/tharunbirla/LibreCuts/releases/latest")
+        openUrl("https://github.com/rajendransarangan365/video365/releases/latest")
+    }
+
+    private fun showHowToUseDialog() {
+        var dialogRef: androidx.appcompat.app.AlertDialog? = null
+        val composeView = ComposeView(this).apply {
+            setContent {
+                com.tharunbirla.librecuts.ui.HowToUseDialog(
+                    onDismiss = {
+                        dialogRef?.dismiss()
+                    },
+                    onLaunchDemoProject = {
+                        dialogRef?.dismiss()
+                        val sampleUri = com.tharunbirla.librecuts.engine.SampleVideo365Project.getOrExtractSampleVideo(this@MainActivity)
+                        navigateToVideo365Editor(sampleUri, "9:16")
+                    }
+                )
+            }
+        }
+        dialogRef = MaterialAlertDialogBuilder(this)
+            .setView(composeView)
+            .show()
     }
 }
