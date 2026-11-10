@@ -1,39 +1,49 @@
 package com.tharunbirla.librecuts.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.google.android.exoplayer2.ExoPlayer
 import com.google.android.exoplayer2.ui.AspectRatioFrameLayout
 import com.google.android.exoplayer2.ui.StyledPlayerView
-import com.tharunbirla.librecuts.viewmodels.Video365ViewModel
-import com.tharunbirla.librecuts.ui.components.Timeline
 import com.tharunbirla.librecuts.ui.components.CommandBar
-import com.tharunbirla.librecuts.ui.components.GraphEditor
 import com.tharunbirla.librecuts.ui.components.EffectsAndTransitionsSheet
+import com.tharunbirla.librecuts.ui.components.FontManagerSheet
+import com.tharunbirla.librecuts.ui.components.GraphEditor
 import com.tharunbirla.librecuts.ui.components.MotionGraphicsViewportOverlay
 import com.tharunbirla.librecuts.ui.components.ScriptingConsoleSheet
-import com.tharunbirla.librecuts.ui.components.FontManagerSheet
+import com.tharunbirla.librecuts.ui.components.Timeline
+import com.tharunbirla.librecuts.ui.components.Video365Icons
+import com.tharunbirla.librecuts.viewmodels.Video365ViewModel
 
 /**
- * Adaptive Editor Workspace matching Adobe Premiere Pro & After Effects mobile requirements.
- * Features dual hardware video decoding + C++ GPU compositing layer + OpenCut AI & Scripting.
+ * Professional Video365 Tailwind & Modern Mobile Workspace.
+ * Exactly matches the attached design:
+ * - Top Bar: Back, "Untitle Project", Checkmark
+ * - Video Viewport: Floating frosted glass bar with Mute, Play/Pause, Fullscreen
+ * - Timeline: Real-time 60fps playhead tracking, waveforms, filmstrip thumbnails
+ * - Bottom Bar: Text, Music, Stickers, Split, Filter
+ * - Add Layer Modal & Export Modal with Resolution/FPS sliders
  */
 @Composable
 fun EditorScreen(
@@ -42,47 +52,107 @@ fun EditorScreen(
 ) {
     val configuration = LocalConfiguration.current
     val isTablet = configuration.screenWidthDp > 600
-    
+
     val project by viewModel.project.collectAsState()
     val currentTimeMs by viewModel.currentTimeMs.collectAsState()
-    
+    val isPlaying by viewModel.isPlaying.collectAsState()
+    val isMuted by viewModel.isMuted.collectAsState()
+
     var showCommandBar by remember { mutableStateOf(false) }
     var showEffectsSheet by remember { mutableStateOf(false) }
     var showHowToUse by remember { mutableStateOf(false) }
     var showScriptingConsole by remember { mutableStateOf(false) }
     var showFontManager by remember { mutableStateOf(false) }
+    var showAddLayerSheet by remember { mutableStateOf(false) }
+    var showExportSheet by remember { mutableStateOf(false) }
 
     val activePlayer = player ?: viewModel.player
 
     Surface(
         modifier = Modifier.fillMaxSize(),
-        color = Color(0xFF0D0F17)
+        color = Color(0xFF0B0F19)
     ) {
-        if (isTablet) {
-            TabletWorkspace(
-                viewModel = viewModel,
-                project = project,
-                currentTimeMs = currentTimeMs,
-                player = activePlayer,
-                onOpenFX = { showEffectsSheet = true },
-                onOpenGuide = { showHowToUse = true },
-                onOpenScripting = { showScriptingConsole = true },
-                onOpenFontManager = { showFontManager = true }
+        Column(modifier = Modifier.fillMaxSize().background(Color(0xFF0B0F19))) {
+
+            // ── TOP BAR: Back, "Untitle Project", Checkmark ───────────
+            EditorTopBar(
+                title = project?.projectMeta?.projectId?.replace("proj_", "")?.let { "Untitle Project" } ?: "Untitle Project",
+                onBack = { /* Handle back or navigate */ },
+                onExport = { showExportSheet = true }
             )
-        } else {
-            PhoneWorkspace(
-                viewModel = viewModel,
-                project = project,
-                currentTimeMs = currentTimeMs,
-                player = activePlayer,
-                onOpenCommandBar = { showCommandBar = true },
-                onOpenFX = { showEffectsSheet = true },
-                onOpenGuide = { showHowToUse = true },
-                onOpenScripting = { showScriptingConsole = true },
-                onOpenFontManager = { showFontManager = true }
+
+            // ── VIDEO VIEWPORT: Rounded Player with Floating Glass Bar ─
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1.35f)
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
+            ) {
+                VideoPlayerViewportCard(
+                    viewModel = viewModel,
+                    project = project,
+                    currentTimeMs = currentTimeMs,
+                    player = activePlayer,
+                    isPlaying = isPlaying,
+                    isMuted = isMuted,
+                    onTogglePlayPause = { viewModel.togglePlayPause() },
+                    onToggleMute = { viewModel.toggleMute() }
+                )
+            }
+
+            // ── TIMELINE: Real-time 60fps moving playhead, waveforms ──
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1.25f)
+            ) {
+                Timeline(
+                    viewModel = viewModel,
+                    layers = project?.compositions?.firstOrNull()?.layers ?: emptyList(),
+                    currentTimeMs = currentTimeMs,
+                    durationMs = project?.compositions?.firstOrNull()?.durationMs ?: 0L,
+                    renderCacheSegments = project?.compositions?.firstOrNull()?.renderCacheSegments ?: emptyList(),
+                    onSeek = { viewModel.seekTo(it) },
+                    onOpenFontManager = { showFontManager = true },
+                    onAddLayerClick = { showAddLayerSheet = true }
+                )
+            }
+
+            // ── BOTTOM TOOLBAR: Text, Music, Stickers, Split, Filter ──
+            EditorTailwindBottomBar(
+                onTextClick = { showFontManager = true },
+                onMusicClick = { viewModel.addExtraLayer("AUDIO", "Heaven in closer - Lalinea") },
+                onStickersClick = { viewModel.addExtraLayer("SHAPE", "Sticker Badge") },
+                onSplitClick = { viewModel.splitLayerAtPlayhead() },
+                onFilterClick = { showEffectsSheet = true },
+                onCommandsClick = { showCommandBar = true }
             )
         }
-        
+
+        // ── DIALOGS & BOTTOM SHEETS ──────────────────────────────────
+        if (showAddLayerSheet) {
+            AddLayerBottomSheet(
+                onDismiss = { showAddLayerSheet = false },
+                onSelectType = { type ->
+                    showAddLayerSheet = false
+                    viewModel.addExtraLayer(type)
+                    if (type == "TEXT") {
+                        showFontManager = true
+                    }
+                }
+            )
+        }
+
+        if (showExportSheet) {
+            ExportModalSheet(
+                onDismiss = { showExportSheet = false },
+                onDownload = {
+                    showExportSheet = false
+                    // Start export
+                }
+            )
+        }
+
         if (showCommandBar) {
             CommandBar(
                 onDismiss = { showCommandBar = false },
@@ -130,309 +200,427 @@ fun EditorScreen(
     }
 }
 
+/**
+ * Top Editor Navigation Bar matching reference design:
+ * Left: Back Arrow (<-)
+ * Center: "Untitle Project"
+ * Right: Checkmark (✓)
+ */
 @Composable
-fun PhoneWorkspace(
-    viewModel: Video365ViewModel,
-    project: com.tharunbirla.librecuts.models.v2.Video365Project?,
-    currentTimeMs: Long,
-    player: ExoPlayer?,
-    onOpenCommandBar: () -> Unit = {},
-    onOpenFX: () -> Unit = {},
-    onOpenGuide: () -> Unit = {},
-    onOpenScripting: () -> Unit = {},
-    onOpenFontManager: () -> Unit = {}
+private fun EditorTopBar(
+    title: String,
+    onBack: () -> Unit,
+    onExport: () -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        // Preview Area with dynamic aspect ratio fit (16:9, 9:16, 1:1, 4:5, 4K, 1080p)
-        BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1.35f)
-                .background(Color(0xFF090A0F)),
-            contentAlignment = Alignment.Center
-        ) {
-            val ratioFloat = when (project?.projectMeta?.orientation) {
-                "HORIZONTAL_16_9", "16:9" -> 16f / 9f
-                "SQUARE_1_1", "1:1" -> 1f
-                "PORTRAIT_4_5", "4:5" -> 4f / 5f
-                else -> 9f / 16f
-            }
-
-            val containerW = maxWidth
-            val containerH = maxHeight
-            val containerRatio = containerW / containerH
-
-            // Perfectly fit viewport bounds without letterbox clipping or overflow
-            val (targetW, targetH) = if (containerRatio > ratioFloat) {
-                (containerH * ratioFloat) to containerH
-            } else {
-                containerW to (containerW / ratioFloat)
-            }
-
-            Box(
-                modifier = Modifier
-                    .size(targetW, targetH)
-                    .background(Color.Black)
-                    .clipToBounds()
-            ) {
-                // 1. Hardware Video Player
-                if (player != null) {
-                    AndroidView(
-                        modifier = Modifier.fillMaxSize(),
-                        factory = { ctx ->
-                            StyledPlayerView(ctx).apply {
-                                useController = false
-                                resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                                this.player = player
-                            }
-                        },
-                        update = { view ->
-                            if (view.player != player) {
-                                view.player = player
-                            }
-                        }
-                    )
-                }
-
-                // 2. Real-time C++ GLSL & Motion Graphics Overlay
-                MotionGraphicsViewportOverlay(
-                    viewModel = viewModel,
-                    currentTimeMs = currentTimeMs,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-        }
-
-        // Quick Controls & Tools Toolbar
-        EditorToolbar(
-            onOpenCommandBar = onOpenCommandBar,
-            onOpenFX = onOpenFX,
-            onOpenGuide = onOpenGuide,
-            onOpenScripting = onOpenScripting,
-            onOpenFontManager = onOpenFontManager
-        )
-
-        // Adobe Premiere Pro / After Effects Interactive Timeline Area
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1.25f)
-        ) {
-            Timeline(
-                viewModel = viewModel,
-                layers = project?.compositions?.firstOrNull()?.layers ?: emptyList(),
-                currentTimeMs = currentTimeMs,
-                durationMs = project?.compositions?.firstOrNull()?.durationMs ?: 0L,
-                renderCacheSegments = project?.compositions?.firstOrNull()?.renderCacheSegments ?: emptyList(),
-                onSeek = { viewModel.seekTo(it) },
-                onOpenFontManager = onOpenFontManager
-            )
-        }
-    }
-}
-
-@Composable
-fun TabletWorkspace(
-    viewModel: Video365ViewModel,
-    project: com.tharunbirla.librecuts.models.v2.Video365Project?,
-    currentTimeMs: Long,
-    player: ExoPlayer?,
-    onOpenFX: () -> Unit = {},
-    onOpenGuide: () -> Unit = {},
-    onOpenScripting: () -> Unit = {},
-    onOpenFontManager: () -> Unit = {}
-) {
-    Row(modifier = Modifier.fillMaxSize()) {
-        // Left Column: Monitor and Timeline
-        Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-            BoxWithConstraints(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .background(Color(0xFF090A0F)),
-                contentAlignment = Alignment.Center
-            ) {
-                val ratioFloat = when (project?.projectMeta?.orientation) {
-                    "HORIZONTAL_16_9", "16:9" -> 16f / 9f
-                    "SQUARE_1_1", "1:1" -> 1f
-                    "PORTRAIT_4_5", "4:5" -> 4f / 5f
-                    else -> 9f / 16f
-                }
-
-                val containerW = maxWidth
-                val containerH = maxHeight
-                val containerRatio = containerW / containerH
-
-                val (targetW, targetH) = if (containerRatio > ratioFloat) {
-                    (containerH * ratioFloat) to containerH
-                } else {
-                    containerW to (containerW / ratioFloat)
-                }
-
-                Box(
-                    modifier = Modifier
-                        .size(targetW, targetH)
-                        .background(Color.Black)
-                        .clipToBounds()
-                ) {
-                    if (player != null) {
-                        AndroidView(
-                            modifier = Modifier.fillMaxSize(),
-                            factory = { ctx ->
-                                StyledPlayerView(ctx).apply {
-                                    useController = false
-                                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                                    this.player = player
-                                }
-                            }
-                        )
-                    }
-                    MotionGraphicsViewportOverlay(
-                        viewModel = viewModel,
-                        currentTimeMs = currentTimeMs,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-            }
-            
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(300.dp)
-            ) {
-                Timeline(
-                    viewModel = viewModel,
-                    layers = project?.compositions?.firstOrNull()?.layers ?: emptyList(),
-                    currentTimeMs = currentTimeMs,
-                    durationMs = project?.compositions?.firstOrNull()?.durationMs ?: 0L,
-                    renderCacheSegments = project?.compositions?.firstOrNull()?.renderCacheSegments ?: emptyList(),
-                    onSeek = { viewModel.seekTo(it) },
-                    onOpenFontManager = onOpenFontManager
-                )
-            }
-        }
-
-        // Right Panel: Effect Controls / Graph Editor
-        Column(
-            modifier = Modifier
-                .width(300.dp)
-                .fillMaxHeight()
-                .background(Color(0xFF141721))
-        ) {
-            Text("Effect Controls", color = Color.White, modifier = Modifier.padding(16.dp))
-            HorizontalDivider(color = Color.DarkGray)
-            Text("Graph Editor", color = Color.Gray, modifier = Modifier.padding(8.dp))
-            GraphEditor(
-                keyframes = emptyList(),
-                durationMs = 5000L,
-                onKeyframeUpdate = { _, _ -> },
-                modifier = Modifier.height(200.dp).fillMaxWidth()
-            )
-        }
-    }
-}
-
-@Composable
-fun EditorToolbar(
-    onOpenCommandBar: () -> Unit = {},
-    onOpenFX: () -> Unit = {},
-    onOpenGuide: () -> Unit = {},
-    onOpenScripting: () -> Unit = {},
-    onOpenFontManager: () -> Unit = {}
-) {
-    var aiZoomActive by remember { mutableStateOf(false) }
-    
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(50.dp)
-            .background(Color(0xFF141721))
-            .padding(horizontal = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+            .height(52.dp)
+            .background(Color(0xFF0B0F19))
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(Color(0xFF00E5FF).copy(alpha = 0.2f))
-                    .clickable { onOpenFX() }
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
-            ) {
-                Text(
-                    text = "FX",
-                    color = Color(0xFF00E5FF),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(Color(0xFF7C4DFF).copy(alpha = 0.25f))
-                    .clickable { onOpenFontManager() }
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
-            ) {
-                Text(
-                    text = "Fonts",
-                    color = Color(0xFFB388FF),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(Color(0xFF26A69A).copy(alpha = 0.2f))
-                    .clickable { onOpenScripting() }
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
-            ) {
-                Text(
-                    text = "Script",
-                    color = Color(0xFF80CBC4),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            Text(
-                text = if (aiZoomActive) "AI Zoom 2x" else "AI Dolly",
-                color = if (aiZoomActive) Color(0xFF00E5FF) else Color(0xFF8E95A5),
-                fontSize = 11.sp,
-                modifier = Modifier
-                    .clickable {
-                        aiZoomActive = !aiZoomActive
-                        com.tharunbirla.librecuts.Video365Engine.setDollyZoom(if (aiZoomActive) 2.0f else 1.0f)
-                    }
-            )
+        // Back Button
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .clickable { onBack() },
+            contentAlignment = Alignment.Center
+        ) {
+            Video365Icons.Back(tint = Color(0xFFF8FAFC), size = 20.dp)
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(
-                onClick = onOpenGuide,
-                modifier = Modifier.size(34.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Info,
-                    contentDescription = "Guide",
-                    tint = Color(0xFF00E5FF)
+        // Title
+        Text(
+            text = title,
+            color = Color(0xFFF8FAFC),
+            fontSize = 15.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+
+        // Checkmark (Done / Export)
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .clickable { onExport() },
+            contentAlignment = Alignment.Center
+        ) {
+            Video365Icons.Check(tint = Color(0xFFF8FAFC), size = 20.dp)
+        }
+    }
+}
+
+/**
+ * Video Player Viewport Card:
+ * - Rounded container with border
+ * - Floating frosted glass bar at bottom with Mute, Play/Pause, Fullscreen
+ */
+@Composable
+private fun VideoPlayerViewportCard(
+    viewModel: Video365ViewModel,
+    project: com.tharunbirla.librecuts.models.v2.Video365Project?,
+    currentTimeMs: Long,
+    player: ExoPlayer?,
+    isPlaying: Boolean,
+    isMuted: Boolean,
+    onTogglePlayPause: () -> Unit,
+    onToggleMute: () -> Unit
+) {
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxSize()
+            .clip(RoundedCornerShape(20.dp))
+            .background(Color(0xFF070A11))
+            .border(width = 1.dp, color = Color(0xFF1E293B), shape = RoundedCornerShape(20.dp)),
+        contentAlignment = Alignment.Center
+    ) {
+        val ratioFloat = when (project?.projectMeta?.orientation) {
+            "HORIZONTAL_16_9", "16:9" -> 16f / 9f
+            "SQUARE_1_1", "1:1" -> 1f
+            "PORTRAIT_4_5", "4:5" -> 4f / 5f
+            else -> 9f / 16f
+        }
+
+        val containerW = maxWidth
+        val containerH = maxHeight
+        val containerRatio = containerW / containerH
+
+        val (targetW, targetH) = if (containerRatio > ratioFloat) {
+            (containerH * ratioFloat) to containerH
+        } else {
+            containerW to (containerW / ratioFloat)
+        }
+
+        Box(
+            modifier = Modifier
+                .size(targetW, targetH)
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color.Black)
+                .clickable { onTogglePlayPause() }
+        ) {
+            // 1. Hardware Video Player
+            if (player != null) {
+                AndroidView(
+                    modifier = Modifier.fillMaxSize(),
+                    factory = { ctx ->
+                        StyledPlayerView(ctx).apply {
+                            useController = false
+                            resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                            this.player = player
+                        }
+                    },
+                    update = { view ->
+                        if (view.player != player) {
+                            view.player = player
+                        }
+                    }
                 )
             }
 
-            Button(
-                onClick = onOpenCommandBar,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222736)),
-                shape = RoundedCornerShape(8.dp),
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                modifier = Modifier.height(32.dp)
+            // 2. Motion Graphics Viewport Overlay
+            MotionGraphicsViewportOverlay(
+                viewModel = viewModel,
+                currentTimeMs = currentTimeMs,
+                modifier = Modifier.fillMaxSize()
+            )
+
+            // 3. Floating Glassmorphism Player Controls Bar (Mute, Play/Pause, Fullscreen)
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(52.dp)
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color.Transparent, Color(0xCC090D16))
+                        )
+                    )
+                    .padding(horizontal = 20.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.Default.Search,
-                    contentDescription = "Search Commands",
-                    tint = Color.White,
-                    modifier = Modifier.size(15.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    // Left: Volume / Mute Button
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .clickable { onToggleMute() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Video365Icons.Volume(isMuted = isMuted, tint = Color.White, size = 20.dp)
+                    }
+
+                    // Center: Large Play / Pause Button
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.25f))
+                            .border(width = 1.dp, color = Color.White.copy(alpha = 0.5f), shape = CircleShape)
+                            .clickable { onTogglePlayPause() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (isPlaying) {
+                            Video365Icons.Pause(tint = Color.White, size = 20.dp)
+                        } else {
+                            Video365Icons.Play(tint = Color.White, size = 20.dp)
+                        }
+                    }
+
+                    // Right: Fullscreen / Aspect Ratio Toggle Button
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .clickable {
+                                // Toggle aspect ratio
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Video365Icons.Fullscreen(tint = Color.White, size = 20.dp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Bottom Tailwind Navigation Bar:
+ * [T] Text, [♪] Music, [☺] Stickers, [✂] Split, [⚗] Filter
+ */
+@Composable
+private fun EditorTailwindBottomBar(
+    onTextClick: () -> Unit,
+    onMusicClick: () -> Unit,
+    onStickersClick: () -> Unit,
+    onSplitClick: () -> Unit,
+    onFilterClick: () -> Unit,
+    onCommandsClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(68.dp)
+            .background(Color(0xFF0F172A))
+            .border(width = 0.5.dp, color = Color(0xFF1E293B))
+            .padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceAround
+    ) {
+        BottomNavItem(label = "Text", icon = { Video365Icons.Text(tint = it, size = 20.dp) }, onClick = onTextClick)
+        BottomNavItem(label = "Music", icon = { Video365Icons.Music(tint = it, size = 20.dp) }, onClick = onMusicClick)
+        BottomNavItem(label = "Stickers", icon = { Video365Icons.Sticker(tint = it, size = 20.dp) }, onClick = onStickersClick)
+        BottomNavItem(label = "Split", icon = { Video365Icons.Split(tint = it, size = 20.dp) }, onClick = onSplitClick)
+        BottomNavItem(label = "Filter", icon = { Video365Icons.Filter(tint = it, size = 20.dp) }, onClick = onFilterClick)
+    }
+}
+
+@Composable
+private fun BottomNavItem(
+    label: String,
+    icon: @Composable (Color) -> Unit,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .width(56.dp)
+            .fillMaxHeight()
+            .clickable { onClick() },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0xFF1E293B)),
+            contentAlignment = Alignment.Center
+        ) {
+            icon(Color(0xFFE2E8F0))
+        }
+        Spacer(modifier = Modifier.height(3.dp))
+        Text(
+            text = label,
+            color = Color(0xFF94A3B8),
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+/**
+ * Add Extra Layer Bottom Sheet:
+ * Lets user add Text, Audio, Sticker, Video, or Adjustment layer.
+ */
+@Composable
+private fun AddLayerBottomSheet(
+    onDismiss: () -> Unit,
+    onSelectType: (String) -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.65f))
+            .clickable { onDismiss() },
+        contentAlignment = Alignment.BottomCenter
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                .background(Color(0xFF0F172A))
+                .padding(24.dp)
+        ) {
+            Text(
+                text = "Add Extra Layer",
+                color = Color(0xFFF8FAFC),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+
+            val options = listOf(
+                Triple("Text Layer", "TEXT", "Add kinetic animated title or lower third"),
+                Triple("Audio / Music", "AUDIO", "Add background music track or audio beat"),
+                Triple("Sticker / Graphic", "SHAPE", "Add custom badge, sticker, or vector graphic"),
+                Triple("Video Overlay (PiP)", "VIDEO", "Add Picture-in-Picture secondary video"),
+                Triple("Adjustment Layer", "ADJUSTMENT", "Add Lumetri color grading and GPU vignette")
+            )
+
+            options.forEach { (title, type, desc) ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 6.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF1E293B))
+                        .clickable { onSelectType(type) }
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text(text = title, color = Color(0xFF06B6D4), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Text(text = desc, color = Color(0xFF94A3B8), fontSize = 11.sp)
+                    }
+                    Video365Icons.Add(tint = Color(0xFF06B6D4), size = 18.dp)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Export Modal Sheet matching Screen 2 of the reference image:
+ * Sliders for Resolution and FPS, plus glowing "Download" button!
+ */
+@Composable
+private fun ExportModalSheet(
+    onDismiss: () -> Unit,
+    onDownload: () -> Unit
+) {
+    var fpsValue by remember { mutableFloatStateOf(30f) }
+    var resolutionValue by remember { mutableStateOf("1080p") }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.65f))
+            .clickable { onDismiss() },
+        contentAlignment = Alignment.BottomCenter
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                .background(Color(0xFF0F172A))
+                .padding(24.dp)
+        ) {
+            Text(
+                text = "Export Settings",
+                color = Color(0xFFF8FAFC),
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Resolution Section
+            Text(text = "Resolution", color = Color(0xFFE2E8F0), fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                listOf("540p", "720p", "1080p", "4K", "8K").forEach { res ->
+                    val isSel = resolutionValue == res
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isSel) Color(0xFF06B6D4) else Color(0xFF1E293B))
+                            .clickable { resolutionValue = res }
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = res,
+                            color = if (isSel) Color.Black else Color(0xFF94A3B8),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // FPS Rate Section
+            Text(text = "FPS rate: ${fpsValue.toInt()} fps", color = Color(0xFFE2E8F0), fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            Spacer(modifier = Modifier.height(6.dp))
+            Slider(
+                value = fpsValue,
+                onValueChange = { fpsValue = it },
+                valueRange = 24f..60f,
+                steps = 4,
+                colors = SliderDefaults.colors(
+                    thumbColor = Color(0xFF06B6D4),
+                    activeTrackColor = Color(0xFF06B6D4),
+                    inactiveTrackColor = Color(0xFF1E293B)
                 )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Commands", color = Color.White, fontSize = 11.sp)
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                listOf("24", "30", "45", "50", "60").forEach {
+                    Text(text = it, color = Color(0xFF64748B), fontSize = 10.sp)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(28.dp))
+
+            // Download / Export Button
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFF06B6D4))
+                    .clickable { onDownload() },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "Download",
+                    color = Color.Black,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     }

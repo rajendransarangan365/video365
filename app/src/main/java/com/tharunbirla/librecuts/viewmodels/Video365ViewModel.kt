@@ -7,16 +7,26 @@ import com.tharunbirla.librecuts.Video365Engine
 import com.tharunbirla.librecuts.engine.JsxPresetEngine
 import com.tharunbirla.librecuts.engine.SampleVideo365Project
 import com.tharunbirla.librecuts.models.v2.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import java.util.ArrayDeque
 import java.util.UUID
 
 /**
- * Primary ViewModel driving Video365 desktop & mobile workspace.
- * Provides timeline scrubbing, multi-track layer movement/trimming,
- * layer visibility & mute toggling, Z-order reordering,
- * and custom font/typography management.
+ * Primary ViewModel driving Video365 modern Tailwind workspace.
+ * Features:
+ * - Real-time 60fps timeline playhead ticker tracking ExoPlayer playback
+ * - Play/Pause and Mute state management
+ * - Undo / Redo history stack
+ * - Multi-track layer movement/trimming, split, duplicate, and delete
+ * - Add Extra Layer (Text, Audio, Sticker/Shape, Video, Adjustment)
+ * - Custom font/typography and Lumetri effects
  */
 class Video365ViewModel : ViewModel() {
     private val _project = MutableStateFlow<Video365Project?>(null)
@@ -24,6 +34,12 @@ class Video365ViewModel : ViewModel() {
 
     private val _currentTimeMs = MutableStateFlow(0L)
     val currentTimeMs: StateFlow<Long> = _currentTimeMs.asStateFlow()
+
+    private val _isPlaying = MutableStateFlow(true)
+    val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
+
+    private val _isMuted = MutableStateFlow(false)
+    val isMuted: StateFlow<Boolean> = _isMuted.asStateFlow()
 
     private val _selectedLayerId = MutableStateFlow<String?>("lyr_mo_title")
     val selectedLayerId: StateFlow<String?> = _selectedLayerId.asStateFlow()
@@ -77,10 +93,87 @@ class Video365ViewModel : ViewModel() {
     private val _activeFontSize = MutableStateFlow(22f)
     val activeFontSize: StateFlow<Float> = _activeFontSize.asStateFlow()
 
-    var player: com.google.android.exoplayer2.ExoPlayer? = null
+    // Undo / Redo Stacks
+    private val undoStack = ArrayDeque<Video365Project>()
+    private val redoStack = ArrayDeque<Video365Project>()
 
+    var player: com.google.android.exoplayer2.ExoPlayer? = null
+    private var playbackTickerJob: Job? = null
+
+    private fun saveSnapshot() {
+        _project.value?.let { proj ->
+            undoStack.addLast(proj)
+            if (undoStack.size > 25) {
+                undoStack.removeFirst()
+            }
+            redoStack.clear()
+        }
+    }
+
+    fun undo() {
+        if (undoStack.isNotEmpty()) {
+            _project.value?.let { redoStack.addLast(it) }
+            val prev = undoStack.removeLast()
+            _project.value = prev
+            Video365Engine.updateProjectState(prev)
+        }
+    }
+
+    fun redo() {
+        if (redoStack.isNotEmpty()) {
+            _project.value?.let { undoStack.addLast(it) }
+            val next = redoStack.removeLast()
+            _project.value = next
+            Video365Engine.updateProjectState(next)
+        }
+    }
+
+    /**
+     * Attaches ExoPlayer and launches real-time 60fps playhead ticker coroutine.
+     */
     fun attachPlayer(p: com.google.android.exoplayer2.ExoPlayer) {
         player = p
+        _isPlaying.value = p.isPlaying
+
+        p.addListener(object : com.google.android.exoplayer2.Player.Listener {
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                _isPlaying.value = isPlaying
+            }
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == com.google.android.exoplayer2.Player.STATE_ENDED) {
+                    _isPlaying.value = false
+                }
+            }
+        })
+
+        playbackTickerJob?.cancel()
+        playbackTickerJob = viewModelScope.launch(Dispatchers.Main) {
+            while (isActive) {
+                val curPlayer = player
+                if (curPlayer != null && curPlayer.isPlaying) {
+                    _currentTimeMs.value = curPlayer.currentPosition
+                }
+                delay(16) // 60fps smooth timeline tracking!
+            }
+        }
+    }
+
+    fun togglePlayPause() {
+        val p = player ?: return
+        if (p.isPlaying) {
+            p.pause()
+            _isPlaying.value = false
+        } else {
+            p.play()
+            _isPlaying.value = true
+        }
+    }
+
+    fun toggleMute() {
+        val p = player ?: return
+        val next = !_isMuted.value
+        _isMuted.value = next
+        p.volume = if (next) 0.0f else 1.0f
     }
 
     fun selectLayer(layerId: String?) {
@@ -96,6 +189,68 @@ class Video365ViewModel : ViewModel() {
     }
 
     /**
+     * Adds an extra layer to the composition (Text, Audio, Sticker/Shape, Video, Adjustment).
+     */
+    fun addExtraLayer(type: String, title: String = "") {
+        val current = _project.value ?: return
+        val comp = current.compositions.firstOrNull() ?: return
+        saveSnapshot()
+
+        val durationMs = comp.durationMs.coerceAtLeast(15000L)
+        val newLayerId = "lyr_${type.lowercase()}_${System.currentTimeMillis() % 10000}"
+
+        val newLayer = when (type.uppercase()) {
+            "TEXT" -> JsxPresetEngine.instantiatePreset("kinetic_title", durationMs).copy(
+                layerId = newLayerId,
+                type = "TEXT",
+                textData = TextData(
+                    text = if (title.isNotBlank()) title else "NEW TITLE",
+                    subtitleText = "Sub-headline text",
+                    fontSize = 20f,
+                    colorHex = "#06B6D4"
+                )
+            )
+            "AUDIO", "MUSIC" -> Layer(
+                layerId = newLayerId,
+                type = "AUDIO",
+                assetId = "ast_audio_sample",
+                inPointMs = 0,
+                outPointMs = durationMs,
+                textData = TextData(text = if (title.isNotBlank()) title else "Heaven in closer - Lalinea")
+            )
+            "SHAPE", "STICKER" -> JsxPresetEngine.instantiatePreset("lower_third", durationMs).copy(
+                layerId = newLayerId,
+                type = "SHAPE",
+                textData = TextData(
+                    text = if (title.isNotBlank()) title else "Sticker Badge",
+                    subtitleText = "Video365 Elements",
+                    fontSize = 14f,
+                    colorHex = "#F59E0B"
+                )
+            )
+            "ADJUSTMENT" -> Layer(
+                layerId = newLayerId,
+                type = "ADJUSTMENT",
+                inPointMs = 0,
+                outPointMs = durationMs
+            )
+            else -> Layer(
+                layerId = newLayerId,
+                type = "VIDEO",
+                assetId = "ast_overlay_video",
+                inPointMs = 0,
+                outPointMs = durationMs
+            )
+        }
+
+        val updatedComp = comp.copy(layers = comp.layers + newLayer)
+        val updatedProject = current.copy(compositions = listOf(updatedComp))
+        _project.value = updatedProject
+        _selectedLayerId.value = newLayer.layerId
+        Video365Engine.updateProjectState(updatedProject)
+    }
+
+    /**
      * Moves a layer horizontally across the timeline (modifies inPoint and outPoint by deltaMs).
      */
     fun moveLayer(layerId: String, deltaMs: Long) {
@@ -103,6 +258,7 @@ class Video365ViewModel : ViewModel() {
         val comp = current.compositions.firstOrNull() ?: return
         val targetLayer = comp.layers.find { it.layerId == layerId } ?: return
 
+        saveSnapshot()
         val duration = targetLayer.outPointMs - targetLayer.inPointMs
         val newInPoint = (targetLayer.inPointMs + deltaMs).coerceAtLeast(0L)
         val newOutPoint = newInPoint + duration
@@ -127,6 +283,7 @@ class Video365ViewModel : ViewModel() {
         val comp = current.compositions.firstOrNull() ?: return
         val targetLayer = comp.layers.find { it.layerId == layerId } ?: return
 
+        saveSnapshot()
         val safeInPoint = newInPointMs.coerceIn(0L, targetLayer.outPointMs - 300L)
         val updatedLayers = comp.layers.map { lyr ->
             if (lyr.layerId == layerId) lyr.copy(inPointMs = safeInPoint) else lyr
@@ -146,6 +303,7 @@ class Video365ViewModel : ViewModel() {
         val comp = current.compositions.firstOrNull() ?: return
         val targetLayer = comp.layers.find { it.layerId == layerId } ?: return
 
+        saveSnapshot()
         val safeOutPoint = newOutPointMs.coerceAtLeast(targetLayer.inPointMs + 300L)
         val updatedLayers = comp.layers.map { lyr ->
             if (lyr.layerId == layerId) lyr.copy(outPointMs = safeOutPoint) else lyr
@@ -171,6 +329,7 @@ class Video365ViewModel : ViewModel() {
             return
         }
 
+        saveSnapshot()
         val originalOut = target.outPointMs
         val part1 = target.copy(outPointMs = playhead)
         val part2 = target.copy(
@@ -204,6 +363,7 @@ class Video365ViewModel : ViewModel() {
         val comp = current.compositions.firstOrNull() ?: return
         val target = comp.layers.find { it.layerId == layerId } ?: return
 
+        saveSnapshot()
         val clone = target.copy(
             layerId = "${target.layerId}_copy_${System.currentTimeMillis() % 1000}"
         )
@@ -221,8 +381,9 @@ class Video365ViewModel : ViewModel() {
     fun deleteLayer(layerId: String) {
         val current = _project.value ?: return
         val comp = current.compositions.firstOrNull() ?: return
-        if (comp.layers.size <= 1) return // Keep at least one track
+        if (comp.layers.size <= 1) return
 
+        saveSnapshot()
         val updatedLayers = comp.layers.filter { it.layerId != layerId }
         val updatedComp = comp.copy(layers = updatedLayers)
         val updatedProject = current.copy(compositions = listOf(updatedComp))
@@ -232,7 +393,7 @@ class Video365ViewModel : ViewModel() {
     }
 
     /**
-     * Changes layer stack Z-order (Move Up/Down in Adobe After Effects / Premiere layer stack).
+     * Changes layer stack Z-order.
      */
     fun reorderLayer(layerId: String, moveUp: Boolean) {
         val current = _project.value ?: return
@@ -243,6 +404,7 @@ class Video365ViewModel : ViewModel() {
         val newIndex = if (moveUp) index - 1 else index + 1
         if (newIndex !in comp.layers.indices) return
 
+        saveSnapshot()
         val mutableList = comp.layers.toMutableList()
         val item = mutableList.removeAt(index)
         mutableList.add(newIndex, item)
@@ -254,66 +416,55 @@ class Video365ViewModel : ViewModel() {
     }
 
     fun toggleLayerVisibility(layerId: String) {
-        val currentHidden = _hiddenLayerIds.value.toMutableSet()
-        if (currentHidden.contains(layerId)) {
-            currentHidden.remove(layerId)
+        val current = _hiddenLayerIds.value
+        _hiddenLayerIds.value = if (current.contains(layerId)) {
+            current - layerId
         } else {
-            currentHidden.add(layerId)
+            current + layerId
         }
-        _hiddenLayerIds.value = currentHidden
     }
 
     fun toggleLayerMute(layerId: String) {
-        val currentMuted = _mutedLayerIds.value.toMutableSet()
-        val isNowMuted = if (currentMuted.contains(layerId)) {
-            currentMuted.remove(layerId)
-            false
+        val current = _mutedLayerIds.value
+        _mutedLayerIds.value = if (current.contains(layerId)) {
+            current - layerId
         } else {
-            currentMuted.add(layerId)
-            true
-        }
-        _mutedLayerIds.value = currentMuted
-
-        // If muting video layer, adjust player volume
-        val targetLayer = _project.value?.compositions?.firstOrNull()?.layers?.find { it.layerId == layerId }
-        if (targetLayer?.type == "VIDEO" || targetLayer?.type == "AUDIO") {
-            player?.volume = if (isNowMuted) 0.0f else 1.0f
+            current + layerId
         }
     }
 
-    /**
-     * Updates typography and font on the active text layer.
-     */
     fun selectFont(fontName: String, fontPath: String?) {
         _activeFontName.value = fontName
         _activeFontPath.value = fontPath
-
-        val selId = _selectedLayerId.value ?: "lyr_mo_title"
-        updateLayerText(selId, _activeTextContent.value, fontName = fontName, fontPath = fontPath)
+        _selectedLayerId.value?.let { id ->
+            updateLayerText(layerId = id, fontName = fontName, fontPath = fontPath)
+        }
     }
 
     fun updateTextContent(text: String) {
         _activeTextContent.value = text
-        val selId = _selectedLayerId.value ?: "lyr_mo_title"
-        updateLayerText(selId, text)
+        _selectedLayerId.value?.let { id ->
+            updateLayerText(layerId = id, text = text)
+        }
     }
 
     fun updateTextColor(hex: String) {
         _activeTextColor.value = hex
-        val selId = _selectedLayerId.value ?: "lyr_mo_title"
-        updateLayerText(selId, _activeTextContent.value, colorHex = hex)
+        _selectedLayerId.value?.let { id ->
+            updateLayerText(layerId = id, colorHex = hex)
+        }
     }
 
     fun updateFontSize(size: Float) {
         _activeFontSize.value = size
-        val selId = _selectedLayerId.value ?: "lyr_mo_title"
-        updateLayerText(selId, _activeTextContent.value, fontSize = size)
+        _selectedLayerId.value?.let { id ->
+            updateLayerText(layerId = id, fontSize = size)
+        }
     }
 
     fun updateLayerText(
         layerId: String,
-        text: String,
-        subtitle: String? = null,
+        text: String? = null,
         fontName: String? = null,
         fontPath: String? = null,
         colorHex: String? = null,
@@ -323,20 +474,17 @@ class Video365ViewModel : ViewModel() {
         val comp = current.compositions.firstOrNull() ?: return
         val target = comp.layers.find { it.layerId == layerId } ?: return
 
-        val existingText = target.textData ?: TextData()
+        val existingText = target.textData ?: TextData(text = target.layerId)
         val updatedTextData = existingText.copy(
-            text = text,
-            subtitleText = subtitle ?: existingText.subtitleText,
+            text = text ?: existingText.text,
             fontName = fontName ?: existingText.fontName,
             fontPath = fontPath ?: existingText.fontPath,
             colorHex = colorHex ?: existingText.colorHex,
             fontSize = fontSize ?: existingText.fontSize
         )
 
-        val updatedLayers = comp.layers.map { lyr ->
-            if (lyr.layerId == layerId) lyr.copy(textData = updatedTextData) else lyr
-        }
-
+        val updatedLayer = target.copy(textData = updatedTextData)
+        val updatedLayers = comp.layers.map { if (it.layerId == layerId) updatedLayer else it }
         val updatedComp = comp.copy(layers = updatedLayers)
         val updatedProject = current.copy(compositions = listOf(updatedComp))
         _project.value = updatedProject
@@ -344,9 +492,8 @@ class Video365ViewModel : ViewModel() {
     }
 
     fun createProject(name: String, ratio: String, width: Int, height: Int) {
-        val projectId = UUID.randomUUID().toString()
+        val projectId = "prj_${UUID.randomUUID().toString().take(8)}"
         val compId = "comp_main"
-        
         val newProject = Video365Project(
             projectMeta = ProjectMeta(
                 projectId = projectId,
@@ -433,5 +580,10 @@ class Video365ViewModel : ViewModel() {
         if (_isDollyEnabled.value) {
             Video365Engine.setDollyZoom(zoom)
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        playbackTickerJob?.cancel()
     }
 }

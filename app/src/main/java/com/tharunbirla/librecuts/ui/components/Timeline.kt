@@ -10,8 +10,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,6 +20,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tharunbirla.librecuts.models.v2.Layer
@@ -30,14 +29,15 @@ import com.tharunbirla.librecuts.viewmodels.Video365ViewModel
 import kotlin.math.sin
 
 /**
- * Adobe Premiere Pro & After Effects Style Mobile Multi-Track Timeline.
+ * Modern Tailwind / Mobile Video Editor Timeline matching attached reference design.
  * Features:
- * - Premiere-style track headers (Mute, Visibility Eye, Z-order Reorder)
- * - Layer Moving: Drag clip body horizontally across time
- * - Trimming: Left (<) and Right (>) trim handles to adjust inPoint and outPoint
- * - Visual clip representations: Video filmstrip, Audio waveforms, Text styling
- * - Timeline playhead scrubber with live timecode
- * - Quick Action Bar: Split, Duplicate, Delete, Nudge, Font Manager
+ * - Real-time 60fps moving playhead line with [16s] top pill indicator
+ * - Audio waveforms in rounded pills (Blue, Cyan, Orange)
+ * - Video filmstrip thumbnails with circular (+) transition split markers
+ * - Left rounded track icon pills (Music, Text, Gallery, Camera, Filter)
+ * - Horizontal drag to move layer across time
+ * - Left (<) and Right (>) trim handles
+ * - Undo, Redo, and (+ Add Layer) header controls
  */
 @Composable
 fun Timeline(
@@ -47,9 +47,10 @@ fun Timeline(
     durationMs: Long,
     renderCacheSegments: List<RenderCacheSegment> = emptyList(),
     onSeek: (Long) -> Unit,
-    onOpenFontManager: () -> Unit = {}
+    onOpenFontManager: () -> Unit = {},
+    onAddLayerClick: () -> Unit = {}
 ) {
-    var zoomLevel by remember { mutableFloatStateOf(0.08f) } // pixels per ms
+    var zoomLevel by remember { mutableFloatStateOf(0.06f) } // pixels per ms
     val scrollState = rememberScrollState()
 
     val selectedLayerId by viewModel.selectedLayerId.collectAsState()
@@ -57,303 +58,297 @@ fun Timeline(
     val mutedLayers by viewModel.mutedLayerIds.collectAsState()
 
     val selectedLayer = layers.find { it.layerId == selectedLayerId }
+    val effectiveDurationMs = durationMs.coerceAtLeast(15000L)
+    val normalizedTimeMs = if (effectiveDurationMs > 0) currentTimeMs % effectiveDurationMs else currentTimeMs
+
+    // Smooth auto-scroll following the playhead
+    LaunchedEffect(normalizedTimeMs) {
+        val playheadDp = (normalizedTimeMs * zoomLevel).toInt()
+        val targetScroll = (playheadDp - 150).coerceAtLeast(0)
+        if (kotlin.math.abs(scrollState.value - targetScroll) > 80) {
+            scrollState.scrollTo(targetScroll)
+        }
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0F1118))
+            .background(Color(0xFF0B0F19))
     ) {
-        // 1. Premiere Pro / After Effects Pre-Render Cache Bar & Time Ruler
-        Column(
+        // ── 1. TIMELINE HEADER: Title, Duration & Undo/Redo/Add Layer ──
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF161922))
+                .height(44.dp)
+                .background(Color(0xFF0F172A))
+                .padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // Green Pre-render segment status line
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(4.dp)
-                    .background(Color(0xFF222634))
-            ) {
-                if (renderCacheSegments.isNotEmpty()) {
-                    renderCacheSegments.forEach { seg ->
-                        val segWidth = ((seg.endMs - seg.startMs) * zoomLevel).dp
-                        Box(
-                            modifier = Modifier
-                                .width(segWidth)
-                                .fillMaxHeight()
-                                .background(if (seg.isValid) Color(0xFF00E676) else Color(0xFFFF5252))
-                        )
-                    }
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(0.9f)
-                            .fillMaxHeight()
-                            .background(Color(0xFF00E676))
-                    )
-                }
+            // Left: "Timeline  4.93s / 15.00s"
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Timeline",
+                    color = Color(0xFFF8FAFC),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = String.format("%.2fs / %.2fs", normalizedTimeMs / 1000f, effectiveDurationMs / 1000f),
+                    color = Color(0xFF94A3B8),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium
+                )
             }
 
-            // Time Header & Quick Playback / Zoom Controls
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(34.dp)
-                    .padding(horizontal = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = String.format("%02d:%02d.%02d", (currentTimeMs / 60000), (currentTimeMs % 60000) / 1000, (currentTimeMs % 1000) / 10),
-                        color = Color(0xFF00E5FF),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "/ " + String.format("%02d:%02d.%02d", (durationMs / 60000), (durationMs % 60000) / 1000, (durationMs % 1000) / 10),
-                        color = Color.Gray,
-                        fontSize = 11.sp
-                    )
-                }
-
-                // Zoom & Timeline Snapping
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    IconButton(
-                        onClick = { zoomLevel = (zoomLevel * 0.8f).coerceAtLeast(0.03f) },
-                        modifier = Modifier.size(26.dp)
-                    ) {
-                        Text("-", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                    }
-                    Text("${(zoomLevel * 1000).toInt()}%", color = Color.LightGray, fontSize = 10.sp)
-                    IconButton(
-                        onClick = { zoomLevel = (zoomLevel * 1.25f).coerceAtMost(0.25f) },
-                        modifier = Modifier.size(26.dp)
-                    ) {
-                        Text("+", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
-
-        // 2. Selected Layer Action Bar (Premiere / AE Editing Controls)
-        if (selectedLayer != null) {
-            Surface(
-                modifier = Modifier.fillMaxWidth().height(42.dp),
-                color = Color(0xFF1B2030),
-                tonalElevation = 4.dp
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+            // Right: Undo, Redo, and (+ Add Layer)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Undo Button
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF1E293B))
+                        .clickable { viewModel.undo() },
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = selectedLayer.layerId.take(12),
-                        color = Color(0xFF00E5FF),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.width(70.dp)
-                    )
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        // Nudge Left (-0.5s)
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Color(0xFF262D42))
-                                .clickable { viewModel.moveLayer(selectedLayer.layerId, -500L) }
-                                .padding(horizontal = 6.dp, vertical = 4.dp)
-                        ) {
-                            Text("◀ 0.5s", color = Color.White, fontSize = 10.sp)
-                        }
-
-                        // Nudge Right (+0.5s)
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Color(0xFF262D42))
-                                .clickable { viewModel.moveLayer(selectedLayer.layerId, 500L) }
-                                .padding(horizontal = 6.dp, vertical = 4.dp)
-                        ) {
-                            Text("0.5s ▶", color = Color.White, fontSize = 10.sp)
-                        }
-
-                        // Split at Playhead
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Color(0xFF00E5FF).copy(alpha = 0.2f))
-                                .clickable { viewModel.splitLayerAtPlayhead(selectedLayer.layerId) }
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text("Split", color = Color(0xFF00E5FF), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                        }
-
-                        // Font Manager (for Text layers or any layer)
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Color(0xFF7C4DFF).copy(alpha = 0.25f))
-                                .clickable { onOpenFontManager() }
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text("T Font", color = Color(0xFFB388FF), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                        }
-
-                        // Duplicate
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Color(0xFF262D42))
-                                .clickable { viewModel.duplicateLayer(selectedLayer.layerId) }
-                                .padding(horizontal = 6.dp, vertical = 4.dp)
-                        ) {
-                            Text("Copy", color = Color.LightGray, fontSize = 10.sp)
-                        }
-
-                        // Delete
-                        IconButton(
-                            onClick = { viewModel.deleteLayer(selectedLayer.layerId) },
-                            modifier = Modifier.size(28.dp)
-                        ) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color(0xFFFF5252), modifier = Modifier.size(16.dp))
-                        }
-                    }
-                }
-            }
-        }
-
-        // 3. Main Multi-Track Area (Left: Track Headers, Right: Interactive Lanes)
-        Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
-            // Left Column: Premiere Pro Track Control Headers (Fixed)
-            Column(
-                modifier = Modifier
-                    .width(82.dp)
-                    .fillMaxHeight()
-                    .background(Color(0xFF141722))
-                    .border(width = 0.5.dp, color = Color(0xFF22283A))
-            ) {
-                // Header spacer matching ruler
-                Box(modifier = Modifier.fillMaxWidth().height(22.dp).background(Color(0xFF181D2A)), contentAlignment = Alignment.Center) {
-                    Text("TRACKS", color = Color.Gray, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    Video365Icons.Undo(tint = Color(0xFFE2E8F0), size = 16.dp)
                 }
 
-                // Track Controls for each layer
-                layers.forEachIndexed { index, layer ->
-                    val isHidden = hiddenLayers.contains(layer.layerId)
-                    val isMuted = mutedLayers.contains(layer.layerId)
-                    val isSelected = selectedLayerId == layer.layerId
+                // Redo Button
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF1E293B))
+                        .clickable { viewModel.redo() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Video365Icons.Redo(tint = Color(0xFFE2E8F0), size = 16.dp)
+                }
 
-                    val trackLabel = when (layer.type) {
-                        "VIDEO" -> "V${index + 1}"
-                        "TEXT" -> "T${index + 1}"
-                        "AUDIO" -> "A${index + 1}"
-                        "ADJUSTMENT" -> "FX"
-                        else -> "S${index + 1}"
-                    }
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp)
-                            .background(if (isSelected) Color(0xFF22293D) else Color(0xFF141722))
-                            .border(width = 0.5.dp, color = Color(0xFF1F2538))
-                            .clickable { viewModel.selectLayer(layer.layerId) }
-                            .padding(horizontal = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        // Track Badge
+                // Add Layer Pill (+)
+                Box(
+                    modifier = Modifier
+                        .height(30.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF06B6D4))
+                        .clickable { onAddLayerClick() }
+                        .padding(horizontal = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Video365Icons.Add(tint = Color.Black, size = 14.dp)
                         Text(
-                            text = trackLabel,
-                            color = when (layer.type) {
-                                "VIDEO" -> Color(0xFF42A5F5)
-                                "TEXT" -> Color(0xFF66BB6A)
-                                "AUDIO" -> Color(0xFFAB47BC)
-                                "ADJUSTMENT" -> Color(0xFFFFA726)
-                                else -> Color(0xFF26C6DA)
-                            },
+                            text = "Layer",
+                            color = Color.Black,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
                         )
+                    }
+                }
+            }
+        }
 
-                        // Visibility Toggle (Eye/Show badge)
+        // ── 2. QUICK EDIT ACTION BAR (when a layer is selected) ────────
+        if (selectedLayer != null) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(36.dp)
+                    .background(Color(0xFF131C31))
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = selectedLayer.textData?.text?.take(16) ?: selectedLayer.layerId.take(14),
+                    color = Color(0xFF06B6D4),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.width(100.dp)
+                )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    // Split at playhead
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFF06B6D4).copy(alpha = 0.2f))
+                            .clickable { viewModel.splitLayerAtPlayhead(selectedLayer.layerId) }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text("Split", color = Color(0xFF06B6D4), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    // Font / Edit Text (for text layers)
+                    if (selectedLayer.type == "TEXT" || selectedLayer.textData != null) {
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(3.dp))
-                                .background(if (isHidden) Color(0xFF222634) else Color(0xFF00E5FF).copy(alpha = 0.2f))
-                                .clickable { viewModel.toggleLayerVisibility(layer.layerId) }
-                                .padding(horizontal = 4.dp, vertical = 2.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFF8B5CF6).copy(alpha = 0.25f))
+                                .clickable { onOpenFontManager() }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
-                            Text(
-                                text = if (isHidden) "OFF" else "ON",
-                                color = if (isHidden) Color.DarkGray else Color(0xFF00E5FF),
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold
+                            Text("Font", color = Color(0xFFC4B5FD), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    // Duplicate
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFF1E293B))
+                            .clickable { viewModel.duplicateLayer(selectedLayer.layerId) }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text("Copy", color = Color(0xFF94A3B8), fontSize = 10.sp)
+                    }
+
+                    // Delete
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFFEF4444).copy(alpha = 0.2f))
+                            .clickable { viewModel.deleteLayer(selectedLayer.layerId) }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text("Del", color = Color(0xFFF87171), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        // ── 3. MAIN MULTI-TRACK TIMELINE CONTAINER ─────────────────────
+        Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
+
+            // LEFT COLUMN: Rounded Track Icon Badges (Music, Text, Gallery, Camera)
+            Column(
+                modifier = Modifier
+                    .width(52.dp)
+                    .fillMaxHeight()
+                    .background(Color(0xFF0F172A))
+                    .padding(vertical = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Header spacer matching ruler height
+                Spacer(modifier = Modifier.height(26.dp))
+
+                // Track Icon Pill for each layer
+                layers.forEach { layer ->
+                    val isSelected = selectedLayerId == layer.layerId
+                    val isHidden = hiddenLayers.contains(layer.layerId)
+
+                    Box(
+                        modifier = Modifier
+                            .padding(vertical = 5.dp)
+                            .size(38.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                if (isSelected) Color(0xFF06B6D4).copy(alpha = 0.25f)
+                                else Color(0xFF1E293B)
                             )
+                            .border(
+                                width = if (isSelected) 1.5.dp else 0.dp,
+                                color = if (isSelected) Color(0xFF06B6D4) else Color.Transparent,
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            .clickable { viewModel.selectLayer(layer.layerId) },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        val iconTint = if (isHidden) Color.DarkGray
+                        else when (layer.type) {
+                            "AUDIO" -> Color(0xFF38BDF8)
+                            "TEXT" -> Color(0xFF4ADE80)
+                            "SHAPE", "STICKER" -> Color(0xFFFBBF24)
+                            "VIDEO" -> Color(0xFFA78BFA)
+                            "ADJUSTMENT" -> Color(0xFFF472B6)
+                            else -> Color(0xFFE2E8F0)
                         }
 
-                        // Mute Toggle (Audio badge)
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(3.dp))
-                                .background(if (isMuted) Color(0xFFFF5252).copy(alpha = 0.2f) else Color(0xFF222634))
-                                .clickable { viewModel.toggleLayerMute(layer.layerId) }
-                                .padding(horizontal = 4.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = if (isMuted) "MUTE" else "VOL",
-                                color = if (isMuted) Color(0xFFFF5252) else Color.LightGray,
-                                fontSize = 8.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                        when (layer.type) {
+                            "AUDIO" -> Video365Icons.Music(tint = iconTint, size = 18.dp)
+                            "TEXT" -> Video365Icons.Text(tint = iconTint, size = 18.dp)
+                            "SHAPE", "STICKER" -> Video365Icons.Gallery(tint = iconTint, size = 18.dp)
+                            "VIDEO" -> Video365Icons.Camera(tint = iconTint, size = 18.dp)
+                            "ADJUSTMENT" -> Video365Icons.Filter(tint = iconTint, size = 18.dp)
+                            else -> Video365Icons.Gallery(tint = iconTint, size = 18.dp)
                         }
                     }
                 }
             }
 
-            // Right Column: Horizontally Scrollable Lanes with Timeline Clips & Scrubber
+            // RIGHT COLUMN: Horizontally Scrollable Lanes with moving Playhead
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
                     .horizontalScroll(scrollState)
             ) {
-                val totalWidthDp = (durationMs.coerceAtLeast(15000L) * zoomLevel).dp
+                val totalWidthDp = (effectiveDurationMs * zoomLevel).dp.coerceAtLeast(600.dp)
 
                 Column(modifier = Modifier.width(totalWidthDp).fillMaxHeight()) {
-                    // Time Ruler with tick marks
+
+                    // ── Time Ruler with Dots and Seconds ──
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(22.dp)
-                            .background(Color(0xFF161924))
-                            .clickable { /* Seek via ruler */ }
+                            .height(26.dp)
+                            .background(Color(0xFF0B0F19))
+                            .pointerInput(Unit) {
+                                detectDragGestures { change, _ ->
+                                    val newMs = (change.position.x / zoomLevel).toLong().coerceIn(0L, effectiveDurationMs)
+                                    onSeek(newMs)
+                                }
+                            }
+                            .clickable { /* Tap to seek handled by pointer */ }
                     ) {
                         Canvas(modifier = Modifier.fillMaxSize()) {
                             val w = size.width
-                            val totalSec = (durationMs / 1000).toInt().coerceAtLeast(15)
+                            val totalSec = (effectiveDurationMs / 1000).toInt()
                             for (sec in 0..totalSec) {
                                 val x = sec * 1000f * zoomLevel
                                 if (x < w) {
-                                    val isMajor = sec % 5 == 0
-                                    drawLine(
-                                        color = if (isMajor) Color.LightGray else Color.DarkGray,
-                                        start = Offset(x, if (isMajor) 0f else 10f),
-                                        end = Offset(x, size.height),
-                                        strokeWidth = if (isMajor) 2f else 1f
-                                    )
+                                    val isMajor = sec % 8 == 0
+                                    if (isMajor) {
+                                        // Tick mark for major intervals
+                                        drawLine(
+                                            color = Color(0xFF64748B),
+                                            start = Offset(x, 4f),
+                                            end = Offset(x, 16f),
+                                            strokeWidth = 1.5f
+                                        )
+                                    } else if (sec % 2 == 0) {
+                                        // Subtle dot for minor seconds
+                                        drawCircle(
+                                            color = Color(0xFF334155),
+                                            radius = 1.5f,
+                                            center = Offset(x, 10f)
+                                        )
+                                    }
                                 }
                             }
                         }
+
+                        // Text labels for 0s, 8s, 16s, 24s...
+                        val totalSec = (effectiveDurationMs / 1000).toInt()
+                        for (sec in 0..totalSec step 8) {
+                            val xOffset = (sec * 1000f * zoomLevel).dp
+                            Text(
+                                text = "${sec}s",
+                                color = Color(0xFF64748B),
+                                fontSize = 10.sp,
+                                modifier = Modifier
+                                    .offset(x = xOffset + 4.dp, y = 2.dp)
+                            )
+                        }
                     }
 
-                    // Track Lanes
+                    // ── Track Lanes ──
                     layers.forEach { layer ->
-                        TrackLane(
+                        TrackRowLane(
                             layer = layer,
                             zoomLevel = zoomLevel,
                             isSelected = selectedLayerId == layer.layerId,
@@ -365,23 +360,34 @@ fun Timeline(
                     }
                 }
 
-                // Premiere Pro / AE Red Playhead Cursor Line
+                // ── PLAYHEAD LINE: Advances smoothly with video playback ──
+                val playheadOffsetDp = (normalizedTimeMs * zoomLevel).dp
+                val currentSeconds = normalizedTimeMs / 1000f
+
                 Box(
                     modifier = Modifier
-                        .offset(x = (currentTimeMs * zoomLevel).dp)
-                        .width(2.dp)
+                        .offset(x = playheadOffsetDp)
+                        .width(2.5.dp)
                         .fillMaxHeight()
-                        .background(Color(0xFFFF1744))
+                        .background(Color.White)
                 ) {
-                    // Playhead Handle Top Indicator
+                    // Top Timecode Pill: [ 16s ] matching reference image!
                     Box(
                         modifier = Modifier
-                            .size(10.dp)
                             .align(Alignment.TopCenter)
-                            .offset(y = (-2).dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFFF1744))
-                    )
+                            .offset(y = 2.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color.White)
+                            .border(width = 1.dp, color = Color(0xFF0F172A), shape = RoundedCornerShape(8.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = String.format("%.1fs", currentSeconds),
+                            color = Color(0xFF0F172A),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
                 }
             }
         }
@@ -389,11 +395,10 @@ fun Timeline(
 }
 
 /**
- * Individual track lane hosting an interactive clip.
- * Supports horizontal moving and left/right trimming.
+ * Modern rounded track lane representing Audio, Video, Text, or Shape clips.
  */
 @Composable
-private fun TrackLane(
+private fun TrackRowLane(
     layer: Layer,
     zoomLevel: Float,
     isSelected: Boolean,
@@ -402,41 +407,39 @@ private fun TrackLane(
     onTrimStart: (Long) -> Unit,
     onTrimEnd: (Long) -> Unit
 ) {
-    val clipWidthDp = ((layer.outPointMs - layer.inPointMs) * zoomLevel).dp.coerceAtLeast(60.dp)
+    val clipWidthDp = ((layer.outPointMs - layer.inPointMs) * zoomLevel).dp.coerceAtLeast(80.dp)
     val clipOffsetDp = (layer.inPointMs * zoomLevel).dp
-
-    val trackColor = when (layer.type) {
-        "ADJUSTMENT" -> Color(0xFFF57C00) // Amber Lumetri
-        "TEXT" -> Color(0xFF2E7D32)       // Green Kinetic Title
-        "SHAPE" -> Color(0xFF00838F)      // Cyan Lower Third
-        "VIDEO" -> Color(0xFF1565C0)      // Blue Main Video
-        "AUDIO" -> Color(0xFF6A1B9A)      // Purple Audio
-        else -> Color(0xFF37474F)
-    }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(50.dp)
-            .border(width = 0.5.dp, color = Color(0xFF161A26))
+            .height(48.dp)
             .padding(vertical = 4.dp)
     ) {
-        // The Interactive Clip
+        // The Interactive Clip Bar
         Box(
             modifier = Modifier
                 .offset(x = clipOffsetDp)
                 .width(clipWidthDp)
                 .fillMaxHeight()
-                .clip(RoundedCornerShape(6.dp))
-                .background(trackColor)
+                .clip(RoundedCornerShape(10.dp))
+                .background(
+                    when (layer.type) {
+                        "AUDIO" -> Brush.horizontalGradient(listOf(Color(0xFF1D4ED8), Color(0xFF2563EB)))
+                        "TEXT" -> Brush.horizontalGradient(listOf(Color(0xFF065F46), Color(0xFF059669)))
+                        "SHAPE", "STICKER" -> Brush.horizontalGradient(listOf(Color(0xFF0E7490), Color(0xFF0891B2)))
+                        "VIDEO" -> Brush.horizontalGradient(listOf(Color(0xFF1E293B), Color(0xFF334155)))
+                        "ADJUSTMENT" -> Brush.horizontalGradient(listOf(Color(0xFFB45309), Color(0xFFD97706)))
+                        else -> Brush.horizontalGradient(listOf(Color(0xFF334155), Color(0xFF475569)))
+                    }
+                )
                 .border(
                     width = if (isSelected) 2.dp else 1.dp,
-                    color = if (isSelected) Color(0xFF00E5FF) else Color.Black.copy(alpha = 0.3f),
-                    shape = RoundedCornerShape(6.dp)
+                    color = if (isSelected) Color(0xFF06B6D4) else Color(0xFF334155),
+                    shape = RoundedCornerShape(10.dp)
                 )
                 .clickable { onSelect() }
                 .pointerInput(layer.layerId) {
-                    // Drag clip body horizontally across time (Layer Moving)
                     detectDragGestures { change, dragAmount ->
                         change.consume()
                         val deltaMs = (dragAmount.x / zoomLevel).toLong()
@@ -446,58 +449,21 @@ private fun TrackLane(
                     }
                 }
         ) {
-            // Visual Clip Content
+            // Visual content inside the clip
             when (layer.type) {
-                "VIDEO" -> {
-                    // Video Filmstrip Frames Preview
-                    Row(modifier = Modifier.fillMaxSize()) {
-                        repeat(6) { index ->
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight()
-                                    .border(width = 0.5.dp, color = Color.Black.copy(alpha = 0.25f))
-                                    .background(Color(0xFF0D47A1).copy(alpha = 0.6f + (index % 3) * 0.1f))
-                            )
-                        }
-                    }
-                    // Audio Waveform overlay at bottom
-                    Canvas(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(14.dp)
-                            .align(Alignment.BottomCenter)
-                    ) {
-                        val canvasW = size.width
-                        val canvasH = size.height
-                        val barW = 3f
-                        val gap = 2f
-                        val count = (canvasW / (barW + gap)).toInt()
-                        for (i in 0 until count) {
-                            val x = i * (barW + gap)
-                            val peak = ((sin(i * 0.35) * 0.4 + sin(i * 1.8) * 0.3 + 0.45).coerceIn(0.15, 0.95) * canvasH).toFloat()
-                            drawLine(
-                                color = Color.White.copy(alpha = 0.4f),
-                                start = Offset(x, canvasH - peak),
-                                end = Offset(x, canvasH),
-                                strokeWidth = barW
-                            )
-                        }
-                    }
-                }
                 "AUDIO" -> {
-                    // Dedicated Full Audio Waveforms
-                    Canvas(modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp)) {
+                    // Audio Waveforms
+                    Canvas(modifier = Modifier.fillMaxSize().padding(horizontal = 6.dp)) {
                         val canvasW = size.width
                         val canvasH = size.height
-                        val barW = 3f
+                        val barW = 2.5f
                         val gap = 2f
                         val count = (canvasW / (barW + gap)).toInt()
                         for (i in 0 until count) {
                             val x = i * (barW + gap)
-                            val peak = ((sin(i * 0.4) * 0.45 + sin(i * 2.2) * 0.35 + 0.5).coerceIn(0.2, 0.95) * canvasH).toFloat()
+                            val peak = ((sin(i * 0.35) * 0.45 + sin(i * 1.5) * 0.35 + 0.5).coerceIn(0.15, 0.95) * canvasH).toFloat()
                             drawLine(
-                                color = Color(0xFFE1BEE7),
+                                color = Color.White.copy(alpha = 0.5f),
                                 start = Offset(x, (canvasH - peak) / 2f),
                                 end = Offset(x, (canvasH + peak) / 2f),
                                 strokeWidth = barW
@@ -505,53 +471,66 @@ private fun TrackLane(
                         }
                     }
                 }
-            }
-
-            // Clip Title & Info Badge
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = when {
-                        layer.textData != null -> "${layer.type}: ${layer.textData.text}"
-                        else -> "${layer.type}: ${layer.layerId.take(10)}"
-                    },
-                    color = Color.White,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1
-                )
-
-                if (layer.transitionOut != null) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(Color.Black.copy(alpha = 0.6f))
-                            .padding(horizontal = 4.dp, vertical = 1.dp)
+                "VIDEO" -> {
+                    // Video Filmstrip with (+) transition markers
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "TR: ${layer.transitionOut.transitionId}",
-                            color = Color(0xFF80D8FF),
-                            fontSize = 8.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        val numFrames = 5
+                        repeat(numFrames) { idx ->
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .border(width = 0.5.dp, color = Color.Black.copy(alpha = 0.4f))
+                                    .background(Color(0xFF1E293B).copy(alpha = 0.7f + (idx % 2) * 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                // Transition split (+) button between frames
+                                if (idx > 0 && idx < numFrames) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(16.dp)
+                                            .clip(CircleShape)
+                                            .background(Color.White.copy(alpha = 0.9f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text("+", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
 
+            // Clip Title
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = layer.textData?.text ?: "${layer.type}: ${layer.layerId.take(12)}",
+                    color = Color.White,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
             // Selection Trim Handles (< and >)
             if (isSelected) {
-                // Left Trim Handle (<)
+                // Left Trim Handle
                 Box(
                     modifier = Modifier
                         .align(Alignment.CenterStart)
-                        .width(14.dp)
+                        .width(16.dp)
                         .fillMaxHeight()
-                        .background(Color(0xFF00E5FF))
+                        .background(Color(0xFF06B6D4))
                         .pointerInput(layer.layerId) {
                             detectDragGestures { change, dragAmount ->
                                 change.consume()
@@ -564,13 +543,13 @@ private fun TrackLane(
                     Text("<", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
                 }
 
-                // Right Trim Handle (>)
+                // Right Trim Handle
                 Box(
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
-                        .width(14.dp)
+                        .width(16.dp)
                         .fillMaxHeight()
-                        .background(Color(0xFF00E5FF))
+                        .background(Color(0xFF06B6D4))
                         .pointerInput(layer.layerId) {
                             detectDragGestures { change, dragAmount ->
                                 change.consume()

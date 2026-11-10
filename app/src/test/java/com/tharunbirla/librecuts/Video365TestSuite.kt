@@ -121,7 +121,7 @@ class Video365TestSuite {
         assertEquals(1, project.compositions.size)
         val comp = project.compositions[0]
         assertEquals(15000L, comp.durationMs)
-        assertEquals(4, comp.layers.size)
+        assertEquals(5, comp.layers.size)
 
         // Track 0: Lumetri Color Adjustment Layer
         val adjLayer = comp.layers[0]
@@ -149,6 +149,11 @@ class Video365TestSuite {
         assertEquals("whip_pan", videoLayer.transitionOut?.transitionId)
         assertEquals(600L, videoLayer.transitionOut?.durationMs)
         assertEquals("90.0", videoLayer.transitionOut?.adjusterParams?.get("directionAngle"))
+
+        // Track 4: Audio Track with Waveforms
+        val audioLayer = comp.layers[4]
+        assertEquals("AUDIO", audioLayer.type)
+        assertEquals("Heaven in closer - Lalinea", audioLayer.textData?.text)
 
         // Verify Part 3 Pre-render Cache Segments (3 x 5s chunks)
         assertEquals(3, comp.renderCacheSegments.size)

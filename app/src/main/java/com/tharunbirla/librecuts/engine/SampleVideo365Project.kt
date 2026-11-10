@@ -138,10 +138,38 @@ object SampleVideo365Project {
             )
         )
 
+        val audioLayer1 = Layer(
+            layerId = "lyr_audio_main",
+            type = "AUDIO",
+            assetId = "ast_audio_01",
+            inPointMs = 0,
+            outPointMs = durationMs,
+            textData = TextData(
+                text = "Heaven in closer - Lalinea",
+                subtitleText = "Original Audio - 320kbps",
+                fontSize = 11f,
+                colorHex = "#3B82F6"
+            )
+        )
+
+        val audioLayer2 = Layer(
+            layerId = "lyr_audio_sfx",
+            type = "AUDIO",
+            assetId = "ast_audio_02",
+            inPointMs = 0,
+            outPointMs = durationMs,
+            textData = TextData(
+                text = "Heaven in closer - Lalinea",
+                subtitleText = "Ambient Beat FX",
+                fontSize = 11f,
+                colorHex = "#F59E0B"
+            )
+        )
+
         val composition = Composition(
             compId = "comp_main_demo",
             durationMs = durationMs,
-            layers = listOf(adjustmentLayer, titleLayer, lowerThirdLayer, videoLayer),
+            layers = listOf(adjustmentLayer, titleLayer, lowerThirdLayer, videoLayer, audioLayer1),
             renderCacheSegments = listOf(
                 RenderCacheSegment("seg_0_5000", 0, 5000, "sha256_mock_01", "file:///cache/seg_0.mp4", true),
                 RenderCacheSegment("seg_5000_10000", 5000, 10000, "sha256_mock_02", "file:///cache/seg_1.mp4", true),
