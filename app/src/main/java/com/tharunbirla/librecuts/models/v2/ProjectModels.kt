@@ -59,9 +59,19 @@ data class RenderCacheSegment(
 )
 
 @Serializable
+data class TextData(
+    val text: String = "VIDEO365 STUDIO",
+    val fontPath: String? = null,
+    val fontName: String = "Default",
+    val fontSize: Float = 22f,
+    val colorHex: String = "#FFFFFF",
+    val subtitleText: String? = "MOTION GRAPHICS & COMPOSITING"
+)
+
+@Serializable
 data class Layer(
     val layerId: String,
-    val type: String, // VIDEO, IMAGE, TEXT, SHAPE, AUDIO
+    val type: String, // VIDEO, IMAGE, TEXT, SHAPE, AUDIO, ADJUSTMENT
     val assetId: String? = null,
     val parentId: String? = null,
     val is3D: Boolean = false,
@@ -71,7 +81,8 @@ data class Layer(
     val masks: List<Mask> = emptyList(),
     val effects: List<Effect> = emptyList(),
     val transitionOut: Transition? = null,
-    val audioChain: AudioChain? = null
+    val audioChain: AudioChain? = null,
+    val textData: TextData? = null
 )
 
 @Serializable

@@ -25,11 +25,18 @@ data class CommandItem(val name: String, val category: String, val action: () ->
 @Composable
 fun CommandBar(
     onDismiss: () -> Unit,
-    onOpenScripting: () -> Unit = {}
+    onOpenScripting: () -> Unit = {},
+    onOpenFontManager: () -> Unit = {}
 ) {
     var query by remember { mutableStateOf("") }
 
     val commandList = listOf(
+        CommandItem("Open Typography & Font Manager", "Typography") { 
+            onOpenFontManager() 
+        },
+        CommandItem("Install Custom Font (.ttf / .otf)", "Typography") { 
+            onOpenFontManager() 
+        },
         CommandItem("Open Scripting & REPL Console", "OpenCut Scripting") { 
             onOpenScripting() 
         },
@@ -91,7 +98,7 @@ fun CommandBar(
                 TextField(
                     value = query,
                     onValueChange = { query = it },
-                    placeholder = { Text("Search Effects, Presets, or Commands...") },
+                    placeholder = { Text("Search Effects, Fonts, or Commands...") },
                     modifier = Modifier.fillMaxWidth(),
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF00E5FF)) },
                     colors = TextFieldDefaults.colors(

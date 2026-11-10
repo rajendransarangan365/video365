@@ -1,5 +1,6 @@
 package com.tharunbirla.librecuts.ui.components
 
+import android.graphics.Typeface
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -11,24 +12,24 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tharunbirla.librecuts.Video365Engine
 import com.tharunbirla.librecuts.viewmodels.Video365ViewModel
+import java.io.File
 import kotlin.math.sin
 
 /**
  * Real-time Motion Graphics, GPU Shader Overlays, and Transition Compositor.
  * Renders directly over the hardware-accelerated 60fps video viewport.
- * Zero-lag, zero black screen, and 100% crash-free across all device tiers.
+ * Dynamically binds custom installed fonts (.ttf / .otf), text styling,
+ * layer visibility toggles, and Premiere / AE keyframe expressions.
  */
 @Composable
 fun MotionGraphicsViewportOverlay(
@@ -45,13 +46,56 @@ fun MotionGraphicsViewportOverlay(
     val vignette by viewModel.vignette.collectAsState()
     val isDollyEnabled by viewModel.isDollyEnabled.collectAsState()
 
+    val hiddenLayers by viewModel.hiddenLayerIds.collectAsState()
+    val activeFontPath by viewModel.activeFontPath.collectAsState()
+    val activeFontName by viewModel.activeFontName.collectAsState()
+    val activeText by viewModel.activeTextContent.collectAsState()
+    val activeColorHex by viewModel.activeTextColor.collectAsState()
+    val activeFontSize by viewModel.activeFontSize.collectAsState()
+
     val comp = project?.compositions?.firstOrNull()
     val layers = comp?.layers ?: emptyList()
 
-    val hasTitleLayer = layers.any { it.type == "TEXT" || it.layerId.contains("title") }
-    val hasLowerThird = layers.any { it.type == "SHAPE" || it.layerId.contains("lower_third") }
+    val titleLayer = layers.find { it.type == "TEXT" || it.layerId.contains("title") }
+    val lowerThirdLayer = layers.find { it.type == "SHAPE" || it.layerId.contains("lower_third") }
+    val adjustmentLayer = layers.find { it.type == "ADJUSTMENT" || it.layerId.contains("adjustment") }
+
+    val isTitleVisible = titleLayer != null && !hiddenLayers.contains(titleLayer.layerId) &&
+            currentTimeMs >= titleLayer.inPointMs && currentTimeMs <= titleLayer.outPointMs
+
+    val isLowerThirdVisible = lowerThirdLayer != null && !hiddenLayers.contains(lowerThirdLayer.layerId) &&
+            currentTimeMs >= lowerThirdLayer.inPointMs && currentTimeMs <= lowerThirdLayer.outPointMs
+
+    val isAdjustmentVisible = adjustmentLayer != null && !hiddenLayers.contains(adjustmentLayer.layerId) &&
+            currentTimeMs >= adjustmentLayer.inPointMs && currentTimeMs <= adjustmentLayer.outPointMs
 
     val timeSec = currentTimeMs / 1000f
+
+    // Dynamic Custom Typeface resolution
+    val customFontFamily = remember(activeFontPath, activeFontName) {
+        if (!activeFontPath.isNullOrBlank() && File(activeFontPath).exists()) {
+            try {
+                FontFamily(Typeface.createFromFile(activeFontPath))
+            } catch (_: Exception) {
+                FontFamily.Default
+            }
+        } else {
+            when {
+                activeFontName.contains("Cursive", ignoreCase = true) -> FontFamily.Cursive
+                activeFontName.contains("Serif", ignoreCase = true) -> FontFamily.Serif
+                activeFontName.contains("Mono", ignoreCase = true) -> FontFamily.Monospace
+                else -> FontFamily.SansSerif
+            }
+        }
+    }
+
+    val dynamicTextColor = remember(activeColorHex) {
+        try {
+            Color(android.graphics.Color.parseColor(activeColorHex))
+        } catch (_: Exception) {
+            Color.White
+        }
+    }
 
     // Evaluate C++ AE Wiggle Expression dynamically
     val wiggleOffset = remember(currentTimeMs) {
@@ -64,26 +108,28 @@ fun MotionGraphicsViewportOverlay(
 
     Box(modifier = modifier.fillMaxSize()) {
         // 1. Lumetri Color & Vignette Canvas Pass
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val canvasWidth = size.width
-            val canvasHeight = size.height
+        if (isAdjustmentVisible) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val canvasWidth = size.width
+                val canvasHeight = size.height
 
-            // Vignette Shader Approximation
-            if (vignette > 0.05f) {
-                val radius = (canvasWidth.coerceAtLeast(canvasHeight) / 2f) * (1.2f - (vignette * 0.4f))
-                val brush = Brush.radialGradient(
-                    colors = listOf(Color.Transparent, Color.Black.copy(alpha = (vignette * 0.85f).coerceIn(0f, 1f))),
-                    center = Offset(canvasWidth / 2f, canvasHeight / 2f),
-                    radius = radius
-                )
-                drawRect(brush = brush, size = size)
-            }
+                // Vignette Shader Approximation
+                if (vignette > 0.05f) {
+                    val radius = (canvasWidth.coerceAtLeast(canvasHeight) / 2f) * (1.2f - (vignette * 0.4f))
+                    val brush = Brush.radialGradient(
+                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = (vignette * 0.85f).coerceIn(0f, 1f))),
+                        center = Offset(canvasWidth / 2f, canvasHeight / 2f),
+                        radius = radius
+                    )
+                    drawRect(brush = brush, size = size)
+                }
 
-            // Exposure Filter
-            if (exposure != 0f) {
-                val expAlpha = (exposure.coerceIn(-1f, 1f).let { if (it > 0) it * 0.35f else -it * 0.5f })
-                val expColor = if (exposure > 0) Color.White else Color.Black
-                drawRect(color = expColor.copy(alpha = expAlpha), size = size)
+                // Exposure Filter
+                if (exposure != 0f) {
+                    val expAlpha = (exposure.coerceIn(-1f, 1f).let { if (it > 0) it * 0.35f else -it * 0.5f })
+                    val expColor = if (exposure > 0) Color.White else Color.Black
+                    drawRect(color = expColor.copy(alpha = expAlpha), size = size)
+                }
             }
         }
 
@@ -96,8 +142,11 @@ fun MotionGraphicsViewportOverlay(
             )
         }
 
-        // 3. Motion Graphics: Kinetic Typography (AE Text Layer)
-        if (hasTitleLayer && currentTimeMs < 12000L) {
+        // 3. Motion Graphics: Kinetic Typography (AE Text Layer with Custom Font)
+        if (isTitleVisible) {
+            val titleText = titleLayer?.textData?.text?.ifBlank { activeText } ?: activeText
+            val subtitleText = titleLayer?.textData?.subtitleText ?: "MOTION GRAPHICS & COMPOSITING"
+
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -110,28 +159,35 @@ fun MotionGraphicsViewportOverlay(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "VIDEO365 STUDIO",
-                        color = Color.White,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = 2.sp
-                    )
-                    Text(
-                        text = "MOTION GRAPHICS & COMPOSITING",
-                        color = Color(0xFF00E5FF),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        text = titleText,
+                        color = dynamicTextColor,
+                        fontSize = activeFontSize.sp,
+                        fontFamily = customFontFamily,
+                        fontWeight = FontWeight.Bold,
                         letterSpacing = 1.sp
                     )
+                    if (!subtitleText.isNullOrBlank()) {
+                        Text(
+                            text = subtitleText,
+                            color = Color(0xFF00E5FF),
+                            fontSize = 10.sp,
+                            fontFamily = customFontFamily,
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = 1.sp
+                        )
+                    }
                 }
             }
         }
 
         // 4. Motion Graphics: Lower Third (AE Shape & Text Layer)
-        if (hasLowerThird && currentTimeMs in 1500L..14000L) {
-            val slideOffset = if (currentTimeMs < 2500L) {
-                ((2500L - currentTimeMs) / 1000f * 120f)
+        if (isLowerThirdVisible) {
+            val slideOffset = if (currentTimeMs - (lowerThirdLayer?.inPointMs ?: 0L) < 1000L) {
+                ((1000L - (currentTimeMs - (lowerThirdLayer?.inPointMs ?: 0L))) / 1000f * 120f)
             } else 0f
+
+            val lowerTitle = lowerThirdLayer?.textData?.text ?: "SARANGAN RAJENDRAN"
+            val lowerSubtitle = lowerThirdLayer?.textData?.subtitleText ?: "VIDEO ARCHITECT & DIRECTOR"
 
             Box(
                 modifier = Modifier
@@ -153,53 +209,29 @@ fun MotionGraphicsViewportOverlay(
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
-                            text = "SARANGAN RAJENDRAN",
+                            text = lowerTitle,
                             color = Color.White,
                             fontSize = 12.sp,
+                            fontFamily = customFontFamily,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 1.sp
                         )
                         Text(
-                            text = "Lead Architect & Director",
+                            text = lowerSubtitle,
                             color = Color(0xFF90CAF9),
                             fontSize = 9.sp,
+                            fontFamily = customFontFamily,
                             fontWeight = FontWeight.Normal
                         )
                     }
                 }
             }
         }
-
-        // 5. On-Device AI Tracking & Dolly Reticle
-        if (isDollyEnabled) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .size(160.dp)
-                    .border(1.5.dp, Color(0xFF00E5FF), RoundedCornerShape(16.dp))
-                    .padding(8.dp)
-            ) {
-                Text(
-                    text = "AI DOLLY [FACE 60FPS]",
-                    color = Color(0xFF00E5FF),
-                    fontSize = 9.sp,
-                    fontFamily = FontFamily.Monospace,
-                    modifier = Modifier.align(Alignment.TopStart)
-                )
-                Text(
-                    text = "ZOOM 1.45x",
-                    color = Color(0xFF7C4DFF),
-                    fontSize = 9.sp,
-                    fontFamily = FontFamily.Monospace,
-                    modifier = Modifier.align(Alignment.BottomEnd)
-                )
-            }
-        }
     }
 }
 
 /**
- * Renders real-time shader-like visual transitions across the preview viewport.
+ * Renders real-time shader visual transitions across the preview viewport.
  */
 @Composable
 private fun TransitionPreviewCanvas(
@@ -213,7 +245,6 @@ private fun TransitionPreviewCanvas(
 
         when (transitionType) {
             "whip_pan" -> {
-                // Directional Motion Blur Swipe
                 val sweepX = w * progress
                 drawRect(
                     brush = Brush.horizontalGradient(
@@ -226,7 +257,6 @@ private fun TransitionPreviewCanvas(
                 )
             }
             "glitch" -> {
-                // Chromatic Aberration & Scanline Glitch
                 val redAlpha = (progress * 0.7f).coerceIn(0f, 0.7f)
                 val cyanAlpha = (progress * 0.7f).coerceIn(0f, 0.7f)
                 val stepH = h / 12f
@@ -247,7 +277,6 @@ private fun TransitionPreviewCanvas(
                 }
             }
             "doorway" -> {
-                // 3D Doorway Split
                 val openW = (w / 2f) * progress
                 drawRect(
                     color = Color.Black.copy(alpha = 0.85f),
@@ -261,7 +290,6 @@ private fun TransitionPreviewCanvas(
                 )
             }
             "zoom" -> {
-                // Dynamic Zoom Focal Speedlines
                 val center = Offset(w / 2f, h / 2f)
                 val maxRadius = (w.coerceAtLeast(h) / 2f)
                 drawCircle(
@@ -275,7 +303,6 @@ private fun TransitionPreviewCanvas(
                 )
             }
             "film_burn" -> {
-                // Warm Amber Film Burn Wash
                 val burnBrush = Brush.linearGradient(
                     colors = listOf(
                         Color(0xFFFF6D00).copy(alpha = progress * 0.7f),
@@ -320,4 +347,3 @@ private fun TransitionPreviewCanvas(
         }
     }
 }
-

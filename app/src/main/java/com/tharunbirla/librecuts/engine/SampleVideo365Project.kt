@@ -54,6 +54,12 @@ object SampleVideo365Project {
 
         val titleLayer = JsxPresetEngine.instantiatePreset("kinetic_title", 10000L).copy(
             layerId = "lyr_mo_title",
+            textData = TextData(
+                text = "VIDEO365 STUDIO",
+                subtitleText = "MOTION GRAPHICS & COMPOSITING",
+                fontSize = 20f,
+                colorHex = "#FFFFFF"
+            ),
             transform = Transform(
                 position = AnimatablePropertyVector3(
                     staticValue = listOf(540.0f, 600.0f, 0.0f),
@@ -77,7 +83,13 @@ object SampleVideo365Project {
         )
 
         val lowerThirdLayer = JsxPresetEngine.instantiatePreset("lower_third", 12000L).copy(
-            layerId = "lyr_mo_lower_third"
+            layerId = "lyr_mo_lower_third",
+            textData = TextData(
+                text = "SARANGAN RAJENDRAN",
+                subtitleText = "VIDEO ARCHITECT & DIRECTOR",
+                fontSize = 14f,
+                colorHex = "#FFFFFF"
+            )
         )
 
         val videoLayer = Layer(

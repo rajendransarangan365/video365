@@ -94,7 +94,17 @@ fun HowToUseDialog(
                     GuideItem(
                         step = "6",
                         title = "OpenCut Scripting & AI Bridge",
-                        desc = "Tap 'REPL / Script' to execute JSX / ExtendScript commands, auto-remove silence with waveform detection, or interact with external AI agents via Model Context Protocol (MCP)."
+                        desc = "Tap 'Script' to execute JSX / ExtendScript commands, auto-remove silence with waveform detection, or interact with external AI agents via Model Context Protocol (MCP)."
+                    )
+                    GuideItem(
+                        step = "7",
+                        title = "Layer Moving & Track Trimming",
+                        desc = "Drag any clip body horizontally across the timeline to move it across time. Drag the '<' and '>' cyan handles to trim in-point and out-point. Tap track icons to toggle visibility (eye) or mute audio."
+                    )
+                    GuideItem(
+                        step = "8",
+                        title = "Install Custom Fonts (.ttf / .otf)",
+                        desc = "Tap 'Fonts' or 'T Font' to pick from trending typography presets or tap 'Install Custom Font' to select and install ANY .ttf or .otf font file directly from your device storage."
                     )
                 }
 
