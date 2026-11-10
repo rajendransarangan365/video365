@@ -19,8 +19,8 @@ import androidx.compose.ui.window.Dialog
 
 /**
  * In-App Instructions Guide explaining how to use Video365.
- * Demonstrates the 5 core systems: Multi-track timeline, GPU Transitions,
- * Lumetri Color, AE Expressions, and Zero-heating 4K proxies.
+ * Demonstrates the 6 core systems: Multi-track timeline, GPU Transitions,
+ * Lumetri Color, AE Expressions, Zero-heating 4K proxies, and OpenCut Scripting/MCP.
  */
 @Composable
 fun HowToUseDialog(
@@ -68,28 +68,33 @@ fun HowToUseDialog(
                 ) {
                     GuideItem(
                         step = "1",
-                        title = "Aspect Ratios & Auto-Proxy",
-                        desc = "Create projects in 9:16 (Vertical) or 16:9 (Landscape). Any 4K or 1080p footage cleanly auto-fits with zero distortion. Large 4K media automatically uses a 540p lightweight proxy for buttery smooth 60fps scrubbing."
+                        title = "Aspect Ratios & Auto-Fit",
+                        desc = "Create projects in 9:16 (Vertical), 16:9 (Landscape), 1:1 (Square), or 4:5. Any 4K or 1080p footage cleanly auto-fits with zero distortion and zero black screen. High bitrate media automatically plays via hardware decoding."
                     )
                     GuideItem(
                         step = "2",
-                        title = "C++ GLSL Transitions",
-                        desc = "Tap 'FX' or open the Transitions sheet to apply GPU-accelerated Whip Pan, Glitch RGB, 3D Doorway, Dynamic Zoom, or Water Wave. Use the scrub slider for live preview."
+                        title = "10 GPU Transitions",
+                        desc = "Tap 'FX & Transitions' to apply GPU-accelerated Whip Pan, Glitch RGB, 3D Doorway, Dynamic Zoom, Film Burn, Radial Blur, Swirl Vortex, Water Wave, Linear Wipe, or Dissolve with live progress scrub."
                     )
                     GuideItem(
                         step = "3",
                         title = "Lumetri Color & Chroma Key",
-                        desc = "Grade footage with live Exposure, Contrast, Saturation, and Lens Vignette sliders. Enable the Green Screen Chroma Key switch for one-tap studio background removal."
+                        desc = "Grade footage with live Exposure, Contrast, Saturation, and Lens Vignette sliders. Enable the Green Screen Chroma Key switch for studio background removal."
                     )
                     GuideItem(
                         step = "4",
                         title = "Motion Graphics & AE Expressions",
-                        desc = "Add dynamic Kinetic Titles and Lower Thirds powered by After Effects math expressions like wiggle(3.0, 25.0) and cubic Bézier easing curves."
+                        desc = "Add dynamic Kinetic Titles and Lower Thirds powered by After Effects math expressions like wiggle(3.0, 25.0) and cubic Bezier easing curves."
                     )
                     GuideItem(
                         step = "5",
                         title = "Render on the Go (Zero Heating)",
-                        desc = "Timeline tracks are divided into 5-second segments. When idle, complex segments pre-render in the background with the Android Thermal API preventing device heat."
+                        desc = "Timeline tracks are divided into 5-second segments. When idle, complex segments pre-render in the background with Android Thermal API preventing device heat."
+                    )
+                    GuideItem(
+                        step = "6",
+                        title = "OpenCut Scripting & AI Bridge",
+                        desc = "Tap 'REPL / Script' to execute JSX / ExtendScript commands, auto-remove silence with waveform detection, or interact with external AI agents via Model Context Protocol (MCP)."
                     )
                 }
 

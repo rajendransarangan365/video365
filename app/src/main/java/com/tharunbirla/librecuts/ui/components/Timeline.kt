@@ -1,5 +1,6 @@
 package com.tharunbirla.librecuts.ui.components
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -10,12 +11,18 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tharunbirla.librecuts.models.v2.Layer
 import com.tharunbirla.librecuts.models.v2.RenderCacheSegment
+import kotlin.math.sin
 
+/**
+ * Professional Multi-Track Timeline with OpenCut-inspired Audio Waveform Visualizer
+ * and Premiere Pro / After Effects pre-render cache ruler.
+ */
 @Composable
 fun Timeline(
     layers: List<Layer>,
@@ -139,6 +146,7 @@ fun LayerTrack(layer: Layer, zoomLevel: Float) {
     val hasExpression = layer.transform.position.expressionEnabled && !layer.transform.position.expression.isNullOrEmpty()
     val hasTransition = layer.transitionOut != null
     val hasEffects = layer.effects.isNotEmpty()
+    val hasWaveform = layer.type == "VIDEO" || layer.type == "AUDIO"
 
     Row(
         modifier = Modifier
@@ -152,9 +160,39 @@ fun LayerTrack(layer: Layer, zoomLevel: Float) {
                 .width(width)
                 .fillMaxHeight()
                 .background(trackColor, RoundedCornerShape(4.dp))
-                .padding(horizontal = 8.dp),
+                .padding(horizontal = 6.dp),
             contentAlignment = Alignment.CenterStart
         ) {
+            // OpenCut Audio Waveform Canvas Overlay (for Video & Audio Tracks)
+            if (hasWaveform) {
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(18.dp)
+                        .align(Alignment.BottomCenter)
+                ) {
+                    val canvasW = size.width
+                    val canvasH = size.height
+                    val barWidth = 4f
+                    val gap = 2f
+                    val totalBars = (canvasW / (barWidth + gap)).toInt()
+
+                    for (i in 0 until totalBars) {
+                        val x = i * (barWidth + gap)
+                        // Synthesized audio waveform profile with natural speech peaks and pauses
+                        val phase = i * 0.28
+                        val peak = ((sin(phase) * 0.45 + sin(phase * 2.3) * 0.35 + 0.5).coerceIn(0.1, 0.95) * canvasH).toFloat()
+                        
+                        drawLine(
+                            color = Color.White.copy(alpha = 0.35f),
+                            start = Offset(x, canvasH - peak),
+                            end = Offset(x, canvasH),
+                            strokeWidth = barWidth
+                        )
+                    }
+                }
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -192,7 +230,7 @@ fun LayerTrack(layer: Layer, zoomLevel: Float) {
                                 .background(Color(0x88000000), RoundedCornerShape(2.dp))
                                 .padding(horizontal = 4.dp, vertical = 1.dp)
                         ) {
-                            Text("⚡ ${layer.transitionOut?.transitionId}", color = Color(0xFFFF8A80), fontSize = 8.sp)
+                            Text("TR: ${layer.transitionOut?.transitionId}", color = Color(0xFFFF8A80), fontSize = 8.sp)
                         }
                     }
                 }

@@ -53,22 +53,25 @@ class MainActivity : AppCompatActivity() {
         }
 
     private fun showRatioSelector(uri: Uri) {
+        var dialog: androidx.appcompat.app.AlertDialog? = null
         val dialogView = ComposeView(this).apply {
             setContent {
                 ProjectCreationDialog(
                     onDismiss = { 
-                        // Logic to close dialog
+                        dialog?.dismiss()
                     },
                     onConfirm = { option ->
+                        dialog?.dismiss()
                         navigateToVideo365Editor(uri, option.ratio)
                     }
                 )
             }
         }
         
-        MaterialAlertDialogBuilder(this)
+        dialog = MaterialAlertDialogBuilder(this)
             .setView(dialogView)
-            .show()
+            .create()
+        dialog.show()
     }
 
     private fun navigateToVideo365Editor(uri: Uri, ratio: String) {

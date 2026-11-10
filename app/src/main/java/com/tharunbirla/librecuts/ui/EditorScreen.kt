@@ -12,8 +12,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -26,10 +28,12 @@ import com.tharunbirla.librecuts.ui.components.CommandBar
 import com.tharunbirla.librecuts.ui.components.GraphEditor
 import com.tharunbirla.librecuts.ui.components.EffectsAndTransitionsSheet
 import com.tharunbirla.librecuts.ui.components.MotionGraphicsViewportOverlay
+import com.tharunbirla.librecuts.ui.components.ScriptingConsoleSheet
 
 /**
  * Adaptive Editor Workspace matching After Effects 2026 Mobile/Tablet requirements.
  * Features dual hardware video decoding + C++ GPU compositing layer.
+ * Includes OpenCut Scripting Console & MCP tool bridge.
  */
 @Composable
 fun EditorScreen(
@@ -45,6 +49,7 @@ fun EditorScreen(
     var showCommandBar by remember { mutableStateOf(false) }
     var showEffectsSheet by remember { mutableStateOf(false) }
     var showHowToUse by remember { mutableStateOf(false) }
+    var showScriptingConsole by remember { mutableStateOf(false) }
 
     val activePlayer = player ?: viewModel.player
 
@@ -59,7 +64,8 @@ fun EditorScreen(
                 currentTimeMs = currentTimeMs,
                 player = activePlayer,
                 onOpenFX = { showEffectsSheet = true },
-                onOpenGuide = { showHowToUse = true }
+                onOpenGuide = { showHowToUse = true },
+                onOpenScripting = { showScriptingConsole = true }
             )
         } else {
             PhoneWorkspace(
@@ -69,18 +75,32 @@ fun EditorScreen(
                 player = activePlayer,
                 onOpenCommandBar = { showCommandBar = true },
                 onOpenFX = { showEffectsSheet = true },
-                onOpenGuide = { showHowToUse = true }
+                onOpenGuide = { showHowToUse = true },
+                onOpenScripting = { showScriptingConsole = true }
             )
         }
         
         if (showCommandBar) {
-            CommandBar(onDismiss = { showCommandBar = false })
+            CommandBar(
+                onDismiss = { showCommandBar = false },
+                onOpenScripting = {
+                    showCommandBar = false
+                    showScriptingConsole = true
+                }
+            )
         }
 
         if (showEffectsSheet) {
             EffectsAndTransitionsSheet(
                 viewModel = viewModel,
                 onDismiss = { showEffectsSheet = false }
+            )
+        }
+
+        if (showScriptingConsole) {
+            ScriptingConsoleSheet(
+                viewModel = viewModel,
+                onDismiss = { showScriptingConsole = false }
             )
         }
 
@@ -104,11 +124,12 @@ fun PhoneWorkspace(
     player: ExoPlayer?,
     onOpenCommandBar: () -> Unit = {},
     onOpenFX: () -> Unit = {},
-    onOpenGuide: () -> Unit = {}
+    onOpenGuide: () -> Unit = {},
+    onOpenScripting: () -> Unit = {}
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
-        // Preview Area (Viewport with dynamic Aspect Ratio container)
-        Box(
+        // Preview Area with dynamic aspect ratio fit (16:9, 9:16, 1:1, 4:5, 4K, 1080p)
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1.5f)
@@ -122,11 +143,22 @@ fun PhoneWorkspace(
                 else -> 9f / 16f
             }
 
+            val containerW = maxWidth
+            val containerH = maxHeight
+            val containerRatio = containerW / containerH
+
+            // Perfectly fit viewport bounds without letterbox clipping or overflow
+            val (targetW, targetH) = if (containerRatio > ratioFloat) {
+                (containerH * ratioFloat) to containerH
+            } else {
+                containerW to (containerW / ratioFloat)
+            }
+
             Box(
                 modifier = Modifier
-                    .fillMaxHeight()
-                    .aspectRatio(ratioFloat)
+                    .size(targetW, targetH)
                     .background(Color.Black)
+                    .clipToBounds()
             ) {
                 // 1. Hardware Video Player
                 if (player != null) {
@@ -156,11 +188,12 @@ fun PhoneWorkspace(
             }
         }
 
-        // Quick Controls
+        // Quick Controls & Tools Toolbar
         EditorToolbar(
             onOpenCommandBar = onOpenCommandBar,
             onOpenFX = onOpenFX,
-            onOpenGuide = onOpenGuide
+            onOpenGuide = onOpenGuide,
+            onOpenScripting = onOpenScripting
         )
 
         // Timeline Area
@@ -187,26 +220,17 @@ fun TabletWorkspace(
     currentTimeMs: Long,
     player: ExoPlayer?,
     onOpenFX: () -> Unit = {},
-    onOpenGuide: () -> Unit = {}
+    onOpenGuide: () -> Unit = {},
+    onOpenScripting: () -> Unit = {}
 ) {
     Row(modifier = Modifier.fillMaxSize()) {
-        // Left Panel: Project Bin / Assets
-        Box(
-            modifier = Modifier
-                .width(250.dp)
-                .fillMaxHeight()
-                .background(Color(0xFF141721))
-        ) {
-            Text("Project Assets", color = Color.Gray, modifier = Modifier.padding(16.dp))
-        }
-
-        // Center Column: Viewport & Timeline
-        Column(modifier = Modifier.weight(1f)) {
-            Box(
+        // Left Column: Monitor and Timeline
+        Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+            BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .background(Color.Black),
+                    .background(Color(0xFF090A0F)),
                 contentAlignment = Alignment.Center
             ) {
                 val ratioFloat = when (project?.projectMeta?.orientation) {
@@ -216,11 +240,21 @@ fun TabletWorkspace(
                     else -> 9f / 16f
                 }
 
+                val containerW = maxWidth
+                val containerH = maxHeight
+                val containerRatio = containerW / containerH
+
+                val (targetW, targetH) = if (containerRatio > ratioFloat) {
+                    (containerH * ratioFloat) to containerH
+                } else {
+                    containerW to (containerW / ratioFloat)
+                }
+
                 Box(
                     modifier = Modifier
-                        .fillMaxHeight()
-                        .aspectRatio(ratioFloat)
+                        .size(targetW, targetH)
                         .background(Color.Black)
+                        .clipToBounds()
                 ) {
                     if (player != null) {
                         AndroidView(
@@ -281,7 +315,8 @@ fun TabletWorkspace(
 fun EditorToolbar(
     onOpenCommandBar: () -> Unit = {},
     onOpenFX: () -> Unit = {},
-    onOpenGuide: () -> Unit = {}
+    onOpenGuide: () -> Unit = {},
+    onOpenScripting: () -> Unit = {}
 ) {
     var aiZoomActive by remember { mutableStateOf(false) }
     
@@ -294,7 +329,7 @@ fun EditorToolbar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = "Trim",
                 color = Color.LightGray,
@@ -312,13 +347,27 @@ fun EditorToolbar(
                     .clip(RoundedCornerShape(6.dp))
                     .background(Color(0xFF00E5FF).copy(alpha = 0.2f))
                     .clickable { onOpenFX() }
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
             ) {
                 Text(
                     text = "FX & Transitions",
                     color = Color(0xFF00E5FF),
                     fontSize = 12.sp,
-                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color(0xFF7C4DFF).copy(alpha = 0.2f))
+                    .clickable { onOpenScripting() }
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    text = "REPL / Script",
+                    color = Color(0xFFB388FF),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
                 )
             }
             Text(
