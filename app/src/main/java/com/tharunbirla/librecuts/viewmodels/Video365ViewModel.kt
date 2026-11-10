@@ -38,8 +38,17 @@ class Video365ViewModel : ViewModel() {
     private val _isPlaying = MutableStateFlow(true)
     val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
 
+    private val _aspectRatio = MutableStateFlow("9:16")
+    val aspectRatio: StateFlow<String> = _aspectRatio.asStateFlow()
+
     private val _isMuted = MutableStateFlow(false)
     val isMuted: StateFlow<Boolean> = _isMuted.asStateFlow()
+
+    private val _snappingEnabled = MutableStateFlow(true)
+    val snappingEnabled: StateFlow<Boolean> = _snappingEnabled.asStateFlow()
+
+    private val _playbackSpeed = MutableStateFlow(1.0f)
+    val playbackSpeed: StateFlow<Float> = _playbackSpeed.asStateFlow()
 
     private val _selectedLayerId = MutableStateFlow<String?>("lyr_mo_title")
     val selectedLayerId: StateFlow<String?> = _selectedLayerId.asStateFlow()
@@ -176,6 +185,27 @@ class Video365ViewModel : ViewModel() {
         p.volume = if (next) 0.0f else 1.0f
     }
 
+    fun stepFrame(deltaFrames: Int) {
+        val p = player ?: return
+        if (p.isPlaying) {
+            p.pause()
+            _isPlaying.value = false
+        }
+        val duration = _project.value?.compositions?.firstOrNull()?.durationMs ?: 15000L
+        val frameMs = 33L // ~30fps frame time
+        val target = (_currentTimeMs.value + deltaFrames * frameMs).coerceIn(0L, duration)
+        seekTo(target)
+    }
+
+    fun toggleSnapping() {
+        _snappingEnabled.value = !_snappingEnabled.value
+    }
+
+    fun setPlaybackSpeed(speed: Float) {
+        _playbackSpeed.value = speed
+        player?.setPlaybackSpeed(speed)
+    }
+
     fun selectLayer(layerId: String?) {
         _selectedLayerId.value = layerId
         val lyr = _project.value?.compositions?.firstOrNull()?.layers?.find { it.layerId == layerId }
@@ -203,6 +233,7 @@ class Video365ViewModel : ViewModel() {
             "TEXT" -> JsxPresetEngine.instantiatePreset("kinetic_title", durationMs).copy(
                 layerId = newLayerId,
                 type = "TEXT",
+                name = if (title.isNotBlank()) title else "Video365 Motion Title",
                 textData = TextData(
                     text = if (title.isNotBlank()) title else "NEW TITLE",
                     subtitleText = "Sub-headline text",
@@ -213,6 +244,7 @@ class Video365ViewModel : ViewModel() {
             "AUDIO", "MUSIC" -> Layer(
                 layerId = newLayerId,
                 type = "AUDIO",
+                name = if (title.isNotBlank()) title else "Heaven in closer - Lalinea",
                 assetId = "ast_audio_sample",
                 inPointMs = 0,
                 outPointMs = durationMs,
@@ -221,6 +253,7 @@ class Video365ViewModel : ViewModel() {
             "SHAPE", "STICKER" -> JsxPresetEngine.instantiatePreset("lower_third", durationMs).copy(
                 layerId = newLayerId,
                 type = "SHAPE",
+                name = if (title.isNotBlank()) title else "Sticker Badge",
                 textData = TextData(
                     text = if (title.isNotBlank()) title else "Sticker Badge",
                     subtitleText = "Video365 Elements",
@@ -231,12 +264,14 @@ class Video365ViewModel : ViewModel() {
             "ADJUSTMENT" -> Layer(
                 layerId = newLayerId,
                 type = "ADJUSTMENT",
+                name = if (title.isNotBlank()) title else "Cinematic Color Grade",
                 inPointMs = 0,
                 outPointMs = durationMs
             )
             else -> Layer(
                 layerId = newLayerId,
                 type = "VIDEO",
+                name = if (title.isNotBlank()) title else "Video Overlay PiP",
                 assetId = "ast_overlay_video",
                 inPointMs = 0,
                 outPointMs = durationMs
@@ -555,7 +590,42 @@ class Video365ViewModel : ViewModel() {
         _chromaThreshold.value = threshold
     }
 
+    fun cycleAspectRatio() {
+        val current = _aspectRatio.value
+        val next = when (current) {
+            "9:16" -> "16:9"
+            "16:9" -> "1:1"
+            "1:1" -> "4:5"
+            else -> "9:16"
+        }
+        setAspectRatio(next)
+    }
+
+    fun setAspectRatio(ratio: String) {
+        _aspectRatio.value = ratio
+        val current = _project.value ?: return
+        val comp = current.compositions.firstOrNull() ?: return
+        val (w, h) = when (ratio) {
+            "16:9" -> 1920 to 1080
+            "1:1" -> 1080 to 1080
+            "4:5" -> 1080 to 1350
+            else -> 1080 to 1920
+        }
+        val updatedMeta = current.projectMeta.copy(
+            orientation = ratio,
+            width = w,
+            height = h
+        )
+        val updatedProject = current.copy(
+            projectMeta = updatedMeta,
+            compositions = listOf(comp)
+        )
+        _project.value = updatedProject
+        Video365Engine.updateProjectState(updatedProject)
+    }
+
     fun loadSampleProject(context: android.content.Context? = null, uri: Uri? = null, ratio: String = "9:16") {
+        _aspectRatio.value = ratio
         val sampleProj = SampleVideo365Project.create(sampleVideoUri = uri, context = context, aspectRatio = ratio)
         _project.value = sampleProj
         Video365Engine.updateProjectState(sampleProj)

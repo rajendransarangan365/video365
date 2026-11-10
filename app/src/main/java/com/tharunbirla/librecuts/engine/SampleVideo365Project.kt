@@ -54,6 +54,7 @@ object SampleVideo365Project {
 
         val titleLayer = JsxPresetEngine.instantiatePreset("kinetic_title", 10000L).copy(
             layerId = "lyr_mo_title",
+            name = "Motion Title",
             textData = TextData(
                 text = "VIDEO365 STUDIO",
                 subtitleText = "MOTION GRAPHICS & COMPOSITING",
@@ -84,6 +85,7 @@ object SampleVideo365Project {
 
         val lowerThirdLayer = JsxPresetEngine.instantiatePreset("lower_third", 12000L).copy(
             layerId = "lyr_mo_lower_third",
+            name = "Lower Third Accent",
             textData = TextData(
                 text = "SARANGAN RAJENDRAN",
                 subtitleText = "VIDEO ARCHITECT & DIRECTOR",
@@ -95,6 +97,7 @@ object SampleVideo365Project {
         val videoLayer = Layer(
             layerId = "lyr_main_video",
             type = "VIDEO",
+            name = "Main Sequence (4K UHD)",
             assetId = "ast_video365_01",
             inPointMs = 0,
             outPointMs = durationMs,
@@ -116,6 +119,7 @@ object SampleVideo365Project {
         val adjustmentLayer = Layer(
             layerId = "lyr_adjustment_color",
             type = "ADJUSTMENT",
+            name = "Cinematic Color Grade",
             inPointMs = 0,
             outPointMs = durationMs,
             transform = Transform(position = AnimatablePropertyVector3(staticValue = listOf(540.0f, 960.0f, 0.0f))),
@@ -141,6 +145,7 @@ object SampleVideo365Project {
         val audioLayer1 = Layer(
             layerId = "lyr_audio_main",
             type = "AUDIO",
+            name = "Heaven in closer - Lalinea",
             assetId = "ast_audio_01",
             inPointMs = 0,
             outPointMs = durationMs,
@@ -155,6 +160,7 @@ object SampleVideo365Project {
         val audioLayer2 = Layer(
             layerId = "lyr_audio_sfx",
             type = "AUDIO",
+            name = "Heaven in closer - Lalinea",
             assetId = "ast_audio_02",
             inPointMs = 0,
             outPointMs = durationMs,

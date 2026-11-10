@@ -60,7 +60,7 @@ class Video365EditingActivity : ComponentActivity() {
         viewModel.loadSampleProject(this, finalUri, ratio)
 
         // Auto-Proxy Pipeline for 4K / High Bitrate (Zero Lag on Low-Spec Hardware)
-        lifecycleScope.launch {
+        lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val proxyMgr = ProxyManager(this@Video365EditingActivity)
                 if (proxyMgr.shouldGenerateProxy(finalUri)) {

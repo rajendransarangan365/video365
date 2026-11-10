@@ -72,6 +72,7 @@ data class TextData(
 data class Layer(
     val layerId: String,
     val type: String, // VIDEO, IMAGE, TEXT, SHAPE, AUDIO, ADJUSTMENT
+    val name: String? = null,
     val assetId: String? = null,
     val parentId: String? = null,
     val is3D: Boolean = false,

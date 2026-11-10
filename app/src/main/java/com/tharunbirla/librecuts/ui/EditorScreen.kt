@@ -6,7 +6,9 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -40,9 +42,9 @@ import com.tharunbirla.librecuts.viewmodels.Video365ViewModel
  * Professional Video365 Tailwind & Modern Mobile Workspace.
  * Exactly matches the attached design:
  * - Top Bar: Back, "Untitle Project", Checkmark
- * - Video Viewport: Floating frosted glass bar with Mute, Play/Pause, Fullscreen
- * - Timeline: Real-time 60fps playhead tracking, waveforms, filmstrip thumbnails
- * - Bottom Bar: Text, Music, Stickers, Split, Filter
+ * - Video Viewport: Floating frosted glass bar with Mute, Prev Frame, Play/Pause, Next Frame, Fullscreen
+ * - Timeline: Perfectly centered player needle with floating capsule ruler, zoom (+/- & pinch), waveforms
+ * - Bottom Tool Drawer: Filter, Text, Crop, Music, Stickers, Split, Blur, Speed, Keyframe, Layer
  * - Add Layer Modal & Export Modal with Resolution/FPS sliders
  */
 @Composable
@@ -70,23 +72,23 @@ fun EditorScreen(
 
     Surface(
         modifier = Modifier.fillMaxSize(),
-        color = Color(0xFF0B0F19)
+        color = Color(0xFF0B0E17)
     ) {
-        Column(modifier = Modifier.fillMaxSize().background(Color(0xFF0B0F19))) {
+        Column(modifier = Modifier.fillMaxSize().background(Color(0xFF0B0E17))) {
 
             // ── TOP BAR: Back, "Untitle Project", Checkmark ───────────
             EditorTopBar(
                 title = project?.projectMeta?.projectId?.replace("proj_", "")?.let { "Untitle Project" } ?: "Untitle Project",
-                onBack = { /* Handle back or navigate */ },
+                onBack = { /* Handle back */ },
                 onExport = { showExportSheet = true }
             )
 
-            // ── VIDEO VIEWPORT: Rounded Player with Floating Glass Bar ─
+            // ── VIDEO VIEWPORT: Rounded Player with Floating Controls ──
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1.35f)
-                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
             ) {
                 VideoPlayerViewportCard(
                     viewModel = viewModel,
@@ -96,11 +98,12 @@ fun EditorScreen(
                     isPlaying = isPlaying,
                     isMuted = isMuted,
                     onTogglePlayPause = { viewModel.togglePlayPause() },
-                    onToggleMute = { viewModel.toggleMute() }
+                    onToggleMute = { viewModel.toggleMute() },
+                    onStepFrame = { delta -> viewModel.stepFrame(delta) }
                 )
             }
 
-            // ── TIMELINE: Real-time 60fps moving playhead, waveforms ──
+            // ── TIMELINE: Centered Needle, Zoom (+/- & pinch), Waveforms ─
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -114,18 +117,22 @@ fun EditorScreen(
                     renderCacheSegments = project?.compositions?.firstOrNull()?.renderCacheSegments ?: emptyList(),
                     onSeek = { viewModel.seekTo(it) },
                     onOpenFontManager = { showFontManager = true },
-                    onAddLayerClick = { showAddLayerSheet = true }
+                    onAddLayerClick = { showAddLayerSheet = true },
+                    onTogglePlayPause = { viewModel.togglePlayPause() },
+                    isPlaying = isPlaying
                 )
             }
 
-            // ── BOTTOM TOOLBAR: Text, Music, Stickers, Split, Filter ──
-            EditorTailwindBottomBar(
+            // ── BOTTOM TOOL DRAWER: Dribbble-Grade Horizontal Dock ────
+            EditorDribbbleBottomBar(
                 onTextClick = { showFontManager = true },
                 onMusicClick = { viewModel.addExtraLayer("AUDIO", "Heaven in closer - Lalinea") },
                 onStickersClick = { viewModel.addExtraLayer("SHAPE", "Sticker Badge") },
                 onSplitClick = { viewModel.splitLayerAtPlayhead() },
                 onFilterClick = { showEffectsSheet = true },
-                onCommandsClick = { showCommandBar = true }
+                onAddLayerClick = { showAddLayerSheet = true },
+                onSpeedClick = { viewModel.setPlaybackSpeed(1.5f) },
+                onKeyframeClick = { showCommandBar = true }
             )
         }
 
@@ -148,7 +155,6 @@ fun EditorScreen(
                 onDismiss = { showExportSheet = false },
                 onDownload = {
                     showExportSheet = false
-                    // Start export
                 }
             )
         }
@@ -215,8 +221,8 @@ private fun EditorTopBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(52.dp)
-            .background(Color(0xFF0B0F19))
+            .height(50.dp)
+            .background(Color(0xFF0B0E17))
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
@@ -256,7 +262,7 @@ private fun EditorTopBar(
 /**
  * Video Player Viewport Card:
  * - Rounded container with border
- * - Floating frosted glass bar at bottom with Mute, Play/Pause, Fullscreen
+ * - Floating frosted glass bar at bottom with Mute, Prev Frame, Play/Pause, Next Frame, Fullscreen
  */
 @Composable
 private fun VideoPlayerViewportCard(
@@ -267,17 +273,19 @@ private fun VideoPlayerViewportCard(
     isPlaying: Boolean,
     isMuted: Boolean,
     onTogglePlayPause: () -> Unit,
-    onToggleMute: () -> Unit
+    onToggleMute: () -> Unit,
+    onStepFrame: (Int) -> Unit
 ) {
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .clip(RoundedCornerShape(20.dp))
             .background(Color(0xFF070A11))
-            .border(width = 1.dp, color = Color(0xFF1E293B), shape = RoundedCornerShape(20.dp)),
+            .border(width = 1.dp, color = Color(0xFF1E2638), shape = RoundedCornerShape(20.dp)),
         contentAlignment = Alignment.Center
     ) {
-        val ratioFloat = when (project?.projectMeta?.orientation) {
+        val activeRatio by viewModel.aspectRatio.collectAsState()
+        val ratioFloat = when (activeRatio) {
             "HORIZONTAL_16_9", "16:9" -> 16f / 9f
             "SQUARE_1_1", "1:1" -> 1f
             "PORTRAIT_4_5", "4:5" -> 4f / 5f
@@ -294,6 +302,7 @@ private fun VideoPlayerViewportCard(
             containerW to (containerW / ratioFloat)
         }
 
+        // Inner Centered Video Canvas
         Box(
             modifier = Modifier
                 .size(targetW, targetH)
@@ -326,65 +335,140 @@ private fun VideoPlayerViewportCard(
                 currentTimeMs = currentTimeMs,
                 modifier = Modifier.fillMaxSize()
             )
+        }
 
-            // 3. Floating Glassmorphism Player Controls Bar (Mute, Play/Pause, Fullscreen)
+        // Top Badges: Resolution & Color Profile (matching Dribbble design)
+        Row(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Box(
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .height(52.dp)
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(Color.Transparent, Color(0xCC090D16))
-                        )
-                    )
-                    .padding(horizontal = 20.dp),
-                contentAlignment = Alignment.Center
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color(0xFF0F172A).copy(alpha = 0.75f))
+                    .border(width = 0.5.dp, color = Color(0xFF334155), shape = RoundedCornerShape(6.dp))
+                    .padding(horizontal = 8.dp, vertical = 3.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    // Left: Volume / Mute Button
+                Text("4K UHD", color = Color(0xFF38BDF8), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            }
+
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color(0xFF0F172A).copy(alpha = 0.75f))
+                    .border(width = 0.5.dp, color = Color(0xFF334155), shape = RoundedCornerShape(6.dp))
+                    .padding(horizontal = 8.dp, vertical = 3.dp)
+            ) {
+                Text("60 FPS", color = Color(0xFF94A3B8), fontSize = 10.sp, fontWeight = FontWeight.Medium)
+            }
+        }
+
+        // 3. Floating Glassmorphism Player Controls Bar (Full container width)
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(56.dp)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color.Transparent, Color(0xEE070A11))
+                    )
+                )
+                .padding(horizontal = 14.dp, vertical = 6.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Left Group: Volume & Prev Frame
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Box(
                         modifier = Modifier
-                            .size(36.dp)
+                            .size(34.dp)
                             .clip(CircleShape)
+                            .background(Color(0xFF161C2C))
                             .clickable { onToggleMute() },
                         contentAlignment = Alignment.Center
                     ) {
-                        Video365Icons.Volume(isMuted = isMuted, tint = Color.White, size = 20.dp)
+                        Video365Icons.Volume(isMuted = isMuted, tint = Color.White, size = 18.dp)
                     }
 
-                    // Center: Large Play / Pause Button
                     Box(
                         modifier = Modifier
-                            .size(44.dp)
+                            .size(34.dp)
                             .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.25f))
-                            .border(width = 1.dp, color = Color.White.copy(alpha = 0.5f), shape = CircleShape)
-                            .clickable { onTogglePlayPause() },
+                            .background(Color(0xFF161C2C))
+                            .clickable { onStepFrame(-1) },
                         contentAlignment = Alignment.Center
                     ) {
-                        if (isPlaying) {
-                            Video365Icons.Pause(tint = Color.White, size = 20.dp)
-                        } else {
-                            Video365Icons.Play(tint = Color.White, size = 20.dp)
-                        }
+                        Video365Icons.PrevFrame(tint = Color(0xFFE2E8F0), size = 16.dp)
+                    }
+                }
+
+                // Center: Large Play / Pause Button
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.25f))
+                        .border(width = 1.dp, color = Color.White.copy(alpha = 0.6f), shape = CircleShape)
+                        .clickable { onTogglePlayPause() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isPlaying) {
+                        Video365Icons.Pause(tint = Color.White, size = 20.dp)
+                    } else {
+                        Video365Icons.Play(tint = Color.White, size = 20.dp)
+                    }
+                }
+
+                // Right Group: Next Frame, Aspect Ratio, & Fullscreen
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF161C2C))
+                            .clickable { onStepFrame(1) },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Video365Icons.NextFrame(tint = Color(0xFFE2E8F0), size = 16.dp)
                     }
 
-                    // Right: Fullscreen / Aspect Ratio Toggle Button
+                    // Aspect Ratio Selector Pill (9:16 / 16:9 / 1:1 / 4:5)
                     Box(
                         modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .clickable {
-                                // Toggle aspect ratio
-                            },
+                            .height(30.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF161C2C))
+                            .border(width = 1.dp, color = Color(0xFF38BDF8), shape = RoundedCornerShape(8.dp))
+                            .clickable { viewModel.cycleAspectRatio() }
+                            .padding(horizontal = 8.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Video365Icons.Fullscreen(tint = Color.White, size = 20.dp)
+                        Text(
+                            text = activeRatio,
+                            color = Color(0xFF38BDF8),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF161C2C))
+                            .clickable { viewModel.cycleAspectRatio() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Video365Icons.Fullscreen(tint = Color.White, size = 18.dp)
                     }
                 }
             }
@@ -393,45 +477,52 @@ private fun VideoPlayerViewportCard(
 }
 
 /**
- * Bottom Tailwind Navigation Bar:
- * [T] Text, [♪] Music, [☺] Stickers, [✂] Split, [⚗] Filter
+ * Bottom Tool Drawer / Dock inspired by Dribbble designs:
+ * [⚗ Filter] [TT Text] [⛶ Crop] [♪ Music] [☺ Stickers] [✂ Split] [⏱ Speed] [⬡ Keyframe] [+ Layer]
  */
 @Composable
-private fun EditorTailwindBottomBar(
+private fun EditorDribbbleBottomBar(
     onTextClick: () -> Unit,
     onMusicClick: () -> Unit,
     onStickersClick: () -> Unit,
     onSplitClick: () -> Unit,
     onFilterClick: () -> Unit,
-    onCommandsClick: () -> Unit
+    onAddLayerClick: () -> Unit,
+    onSpeedClick: () -> Unit,
+    onKeyframeClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(68.dp)
-            .background(Color(0xFF0F172A))
-            .border(width = 0.5.dp, color = Color(0xFF1E293B))
+            .background(Color(0xFF0F1420))
+            .border(width = 0.5.dp, color = Color(0xFF1E2638))
+            .horizontalScroll(rememberScrollState())
             .padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceAround
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        BottomNavItem(label = "Text", icon = { Video365Icons.Text(tint = it, size = 20.dp) }, onClick = onTextClick)
-        BottomNavItem(label = "Music", icon = { Video365Icons.Music(tint = it, size = 20.dp) }, onClick = onMusicClick)
-        BottomNavItem(label = "Stickers", icon = { Video365Icons.Sticker(tint = it, size = 20.dp) }, onClick = onStickersClick)
-        BottomNavItem(label = "Split", icon = { Video365Icons.Split(tint = it, size = 20.dp) }, onClick = onSplitClick)
-        BottomNavItem(label = "Filter", icon = { Video365Icons.Filter(tint = it, size = 20.dp) }, onClick = onFilterClick)
+        BottomDockItem(label = "Filter", icon = { Video365Icons.Filter(tint = it, size = 19.dp) }, onClick = onFilterClick)
+        BottomDockItem(label = "Text", icon = { Video365Icons.Text(tint = it, size = 19.dp) }, onClick = onTextClick)
+        BottomDockItem(label = "Crop", icon = { Video365Icons.Crop(tint = it, size = 19.dp) }, onClick = onSplitClick)
+        BottomDockItem(label = "Music", icon = { Video365Icons.Music(tint = it, size = 19.dp) }, onClick = onMusicClick)
+        BottomDockItem(label = "Stickers", icon = { Video365Icons.Sticker(tint = it, size = 19.dp) }, onClick = onStickersClick)
+        BottomDockItem(label = "Split", icon = { Video365Icons.Split(tint = it, size = 19.dp) }, onClick = onSplitClick)
+        BottomDockItem(label = "Speed", icon = { Video365Icons.Speed(tint = it, size = 19.dp) }, onClick = onSpeedClick)
+        BottomDockItem(label = "Keyframe", icon = { Video365Icons.Keyframe(tint = it, size = 19.dp) }, onClick = onKeyframeClick)
+        BottomDockItem(label = "Layer", icon = { Video365Icons.Layers(tint = it, size = 19.dp) }, onClick = onAddLayerClick)
     }
 }
 
 @Composable
-private fun BottomNavItem(
+private fun BottomDockItem(
     label: String,
     icon: @Composable (Color) -> Unit,
     onClick: () -> Unit
 ) {
     Column(
         modifier = Modifier
-            .width(56.dp)
+            .width(54.dp)
             .fillMaxHeight()
             .clickable { onClick() },
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -441,7 +532,7 @@ private fun BottomNavItem(
             modifier = Modifier
                 .size(34.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(Color(0xFF1E293B)),
+                .background(Color(0xFF182030)),
             contentAlignment = Alignment.Center
         ) {
             icon(Color(0xFFE2E8F0))
@@ -476,7 +567,7 @@ private fun AddLayerBottomSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                .background(Color(0xFF0F172A))
+                .background(Color(0xFF0F1420))
                 .padding(24.dp)
         ) {
             Text(
@@ -501,7 +592,7 @@ private fun AddLayerBottomSheet(
                         .fillMaxWidth()
                         .padding(vertical = 6.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFF1E293B))
+                        .background(Color(0xFF182030))
                         .clickable { onSelectType(type) }
                         .padding(14.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -541,7 +632,7 @@ private fun ExportModalSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                .background(Color(0xFF0F172A))
+                .background(Color(0xFF0F1420))
                 .padding(24.dp)
         ) {
             Text(
@@ -564,7 +655,7 @@ private fun ExportModalSheet(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
-                            .background(if (isSel) Color(0xFF06B6D4) else Color(0xFF1E293B))
+                            .background(if (isSel) Color(0xFF06B6D4) else Color(0xFF182030))
                             .clickable { resolutionValue = res }
                             .padding(horizontal = 12.dp, vertical = 8.dp)
                     ) {
@@ -591,7 +682,7 @@ private fun ExportModalSheet(
                 colors = SliderDefaults.colors(
                     thumbColor = Color(0xFF06B6D4),
                     activeTrackColor = Color(0xFF06B6D4),
-                    inactiveTrackColor = Color(0xFF1E293B)
+                    inactiveTrackColor = Color(0xFF182030)
                 )
             )
             Row(

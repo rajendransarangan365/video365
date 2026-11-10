@@ -377,4 +377,178 @@ object Video365Icons {
             drawPath(mtn, color = tint, style = Stroke(width = strokeW, cap = StrokeCap.Round, join = StrokeJoin.Round))
         }
     }
+
+    @Composable
+    fun PrevFrame(tint: Color = Color.White, size: Dp = 20.dp, modifier: Modifier = Modifier) {
+        Canvas(modifier = modifier.size(size)) {
+            val w = this.size.width
+            val h = this.size.height
+            val strokeW = (w * 0.10f).coerceAtLeast(1.8f)
+            // Left vertical line
+            drawLine(tint, Offset(w * 0.22f, h * 0.22f), Offset(w * 0.22f, h * 0.78f), strokeW, StrokeCap.Round)
+            // Left triangle
+            val path = Path().apply {
+                moveTo(w * 0.78f, h * 0.22f)
+                lineTo(w * 0.35f, h * 0.50f)
+                lineTo(w * 0.78f, h * 0.78f)
+                close()
+            }
+            drawPath(path, color = tint, style = Fill)
+        }
+    }
+
+    @Composable
+    fun NextFrame(tint: Color = Color.White, size: Dp = 20.dp, modifier: Modifier = Modifier) {
+        Canvas(modifier = modifier.size(size)) {
+            val w = this.size.width
+            val h = this.size.height
+            val strokeW = (w * 0.10f).coerceAtLeast(1.8f)
+            // Right triangle
+            val path = Path().apply {
+                moveTo(w * 0.22f, h * 0.22f)
+                lineTo(w * 0.65f, h * 0.50f)
+                lineTo(w * 0.22f, h * 0.78f)
+                close()
+            }
+            drawPath(path, color = tint, style = Fill)
+            // Right vertical line
+            drawLine(tint, Offset(w * 0.78f, h * 0.22f), Offset(w * 0.78f, h * 0.78f), strokeW, StrokeCap.Round)
+        }
+    }
+
+    @Composable
+    fun ZoomIn(tint: Color = Color.White, size: Dp = 20.dp, modifier: Modifier = Modifier) {
+        Canvas(modifier = modifier.size(size)) {
+            val w = this.size.width
+            val h = this.size.height
+            val strokeW = (w * 0.09f).coerceAtLeast(1.6f)
+            // Glass circle
+            drawCircle(tint, radius = w * 0.30f, center = Offset(w * 0.42f, h * 0.42f), style = Stroke(strokeW))
+            // Handle
+            drawLine(tint, Offset(w * 0.64f, h * 0.64f), Offset(w * 0.86f, h * 0.86f), strokeW * 1.3f, StrokeCap.Round)
+            // Plus
+            drawLine(tint, Offset(w * 0.30f, h * 0.42f), Offset(w * 0.54f, h * 0.42f), strokeW, StrokeCap.Round)
+            drawLine(tint, Offset(w * 0.42f, h * 0.30f), Offset(w * 0.42f, h * 0.54f), strokeW, StrokeCap.Round)
+        }
+    }
+
+    @Composable
+    fun ZoomOut(tint: Color = Color.White, size: Dp = 20.dp, modifier: Modifier = Modifier) {
+        Canvas(modifier = modifier.size(size)) {
+            val w = this.size.width
+            val h = this.size.height
+            val strokeW = (w * 0.09f).coerceAtLeast(1.6f)
+            // Glass circle
+            drawCircle(tint, radius = w * 0.30f, center = Offset(w * 0.42f, h * 0.42f), style = Stroke(strokeW))
+            // Handle
+            drawLine(tint, Offset(w * 0.64f, h * 0.64f), Offset(w * 0.86f, h * 0.86f), strokeW * 1.3f, StrokeCap.Round)
+            // Minus
+            drawLine(tint, Offset(w * 0.30f, h * 0.42f), Offset(w * 0.54f, h * 0.42f), strokeW, StrokeCap.Round)
+        }
+    }
+
+    @Composable
+    fun Magnet(tint: Color = Color.White, size: Dp = 20.dp, modifier: Modifier = Modifier) {
+        Canvas(modifier = modifier.size(size)) {
+            val w = this.size.width
+            val h = this.size.height
+            val strokeW = (w * 0.12f).coerceAtLeast(2f)
+            // U-shape magnet
+            drawArc(
+                color = tint,
+                startAngle = 0f,
+                sweepAngle = 180f,
+                useCenter = false,
+                topLeft = Offset(w * 0.22f, h * 0.35f),
+                size = Size(w * 0.56f, h * 0.45f),
+                style = Stroke(strokeW, cap = StrokeCap.Butt)
+            )
+            drawLine(tint, Offset(w * 0.22f, h * 0.20f), Offset(w * 0.22f, h * 0.58f), strokeW, StrokeCap.Butt)
+            drawLine(tint, Offset(w * 0.78f, h * 0.20f), Offset(w * 0.78f, h * 0.58f), strokeW, StrokeCap.Butt)
+            // Poles (red/cyan)
+            drawLine(Color(0xFFEF4444), Offset(w * 0.22f, h * 0.18f), Offset(w * 0.22f, h * 0.28f), strokeW, StrokeCap.Butt)
+            drawLine(Color(0xFF06B6D4), Offset(w * 0.78f, h * 0.18f), Offset(w * 0.78f, h * 0.28f), strokeW, StrokeCap.Butt)
+        }
+    }
+
+    @Composable
+    fun Crop(tint: Color = Color.White, size: Dp = 20.dp, modifier: Modifier = Modifier) {
+        Canvas(modifier = modifier.size(size)) {
+            val w = this.size.width
+            val h = this.size.height
+            val strokeW = (w * 0.09f).coerceAtLeast(1.8f)
+            // Top-left bracket
+            drawLine(tint, Offset(w * 0.15f, h * 0.35f), Offset(w * 0.75f, h * 0.35f), strokeW, StrokeCap.Round)
+            drawLine(tint, Offset(w * 0.35f, h * 0.15f), Offset(w * 0.35f, h * 0.75f), strokeW, StrokeCap.Round)
+            // Bottom-right bracket
+            drawLine(tint, Offset(w * 0.25f, h * 0.65f), Offset(w * 0.85f, h * 0.65f), strokeW, StrokeCap.Round)
+            drawLine(tint, Offset(w * 0.65f, h * 0.25f), Offset(w * 0.65f, h * 0.85f), strokeW, StrokeCap.Round)
+        }
+    }
+
+    @Composable
+    fun Speed(tint: Color = Color.White, size: Dp = 20.dp, modifier: Modifier = Modifier) {
+        Canvas(modifier = modifier.size(size)) {
+            val w = this.size.width
+            val h = this.size.height
+            val strokeW = (w * 0.08f).coerceAtLeast(1.5f)
+            // Gauge arc
+            drawArc(
+                color = tint,
+                startAngle = 140f,
+                sweepAngle = 260f,
+                useCenter = false,
+                topLeft = Offset(w * 0.18f, h * 0.18f),
+                size = Size(w * 0.64f, h * 0.64f),
+                style = Stroke(strokeW, cap = StrokeCap.Round)
+            )
+            // Needle
+            drawLine(Color(0xFF06B6D4), Offset(w * 0.5f, h * 0.5f), Offset(w * 0.68f, h * 0.32f), strokeW * 1.2f, StrokeCap.Round)
+            drawCircle(tint, radius = w * 0.06f, center = Offset(w * 0.5f, h * 0.5f))
+        }
+    }
+
+    @Composable
+    fun Keyframe(tint: Color = Color.White, size: Dp = 20.dp, modifier: Modifier = Modifier) {
+        Canvas(modifier = modifier.size(size)) {
+            val w = this.size.width
+            val h = this.size.height
+            val strokeW = (w * 0.09f).coerceAtLeast(1.8f)
+            // Diamond / Rhombus
+            val path = Path().apply {
+                moveTo(w * 0.5f, h * 0.18f)
+                lineTo(w * 0.82f, h * 0.5f)
+                lineTo(w * 0.5f, h * 0.82f)
+                lineTo(w * 0.18f, h * 0.5f)
+                close()
+            }
+            drawPath(path, color = tint, style = Stroke(strokeW, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        }
+    }
+
+    @Composable
+    fun Layers(tint: Color = Color.White, size: Dp = 20.dp, modifier: Modifier = Modifier) {
+        Canvas(modifier = modifier.size(size)) {
+            val w = this.size.width
+            val h = this.size.height
+            val strokeW = (w * 0.09f).coerceAtLeast(1.8f)
+            // Top rhomboid layer
+            val topP = Path().apply {
+                moveTo(w * 0.5f, h * 0.18f)
+                lineTo(w * 0.85f, h * 0.35f)
+                lineTo(w * 0.5f, h * 0.52f)
+                lineTo(w * 0.15f, h * 0.35f)
+                close()
+            }
+            drawPath(topP, color = tint, style = Stroke(strokeW, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            // Bottom chevron
+            val botP = Path().apply {
+                moveTo(w * 0.15f, h * 0.55f)
+                lineTo(w * 0.5f, h * 0.72f)
+                lineTo(w * 0.85f, h * 0.55f)
+            }
+            drawPath(botP, color = tint, style = Stroke(strokeW, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        }
+    }
 }
+
