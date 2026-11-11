@@ -824,8 +824,8 @@ class _TrackClipRow extends StatelessWidget {
           }
           seamButtons.add(
             Positioned(
-              left: (rightClip.startMs * ppm) - 11,
-              top: (_height - 22) / 2,
+              left: (rightClip.startMs * ppm) - 18,
+              top: (_height - 36) / 2,
               child: _TransitionCutButton(
                 leftClip: leftClip,
                 rightClip: rightClip,
@@ -1363,28 +1363,33 @@ class _TransitionCutButton extends StatelessWidget {
         );
       },
       child: Container(
-        width: 22,
-        height: 22,
-        decoration: BoxDecoration(
-          color: hasTransition ? Video365Colors.activeGreen : const Color(0xFF151B28),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(
-            color: hasTransition ? Colors.white : const Color(0xFF475569),
-            width: 1.2,
-          ),
-          boxShadow: const [
-            BoxShadow(
-              color: Colors.black87,
-              blurRadius: 5,
-              offset: Offset(0, 1),
+        width: 36,
+        height: 36,
+        alignment: Alignment.center,
+        child: Container(
+          width: 22,
+          height: 22,
+          decoration: BoxDecoration(
+            color: hasTransition ? Video365Colors.activeGreen : const Color(0xFF151B28),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: hasTransition ? Colors.white : const Color(0xFF475569),
+              width: 1.2,
             ),
-          ],
-        ),
-        child: Center(
-          child: Icon(
-            hasTransition ? transition!.type.icon : Icons.hourglass_bottom_rounded,
-            size: 12,
-            color: hasTransition ? const Color(0xFF080A0E) : Colors.white70,
+            boxShadow: const [
+              BoxShadow(
+                color: Colors.black87,
+                blurRadius: 5,
+                offset: Offset(0, 1),
+              ),
+            ],
+          ),
+          child: Center(
+            child: Icon(
+              hasTransition ? transition!.type.icon : Icons.hourglass_bottom_rounded,
+              size: 12,
+              color: hasTransition ? const Color(0xFF080A0E) : Colors.white70,
+            ),
           ),
         ),
       ),

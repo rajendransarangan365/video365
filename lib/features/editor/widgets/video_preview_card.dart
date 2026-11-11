@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -262,6 +263,55 @@ class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
       editorState.activeFilterIntensity,
     );
 
+    // Find active transition at currentTimeMs
+    ClipTransition? activeTransition;
+    ClipItem? transitionLeftClip;
+    ClipItem? transitionRightClip;
+    double transitionProgress = 0.0;
+
+    for (final tr in editorState.project.transitions) {
+      if (tr.type == TransitionType.none) continue;
+      ClipItem? cL;
+      ClipItem? cR;
+      for (final t in editorState.project.tracks) {
+        for (final c in t.clips) {
+          if (c.id == tr.leftClipId) cL = c;
+          if (c.id == tr.rightClipId) cR = c;
+        }
+      }
+      if (cL != null && cR != null) {
+        final cutTime = cR.startMs;
+        final halfDur = tr.durationMs / 2.0;
+        final tStart = cutTime - halfDur;
+        final tEnd = cutTime + halfDur;
+        if (currentTime >= tStart && currentTime <= tEnd) {
+          activeTransition = tr;
+          transitionLeftClip = cL;
+          transitionRightClip = cR;
+          transitionProgress = ((currentTime - tStart) / (tEnd - tStart)).clamp(0.0, 1.0);
+          break;
+        }
+      }
+    }
+
+    // Find active effect clip on any FX track
+    ClipItem? activeFxClip;
+    for (final track in editorState.project.tracks) {
+      if (track.isHidden) continue;
+      if (track.type == TrackType.effect) {
+        for (final clip in track.clips) {
+          if (currentTime >= clip.startMs && currentTime <= clip.endMs) {
+            activeFxClip = clip;
+            break;
+          }
+        }
+        if (activeFxClip != null) break;
+      }
+    }
+
+    final activeEffectType = activeFxClip?.effectType ?? activeVideoClip?.effectType ?? editorState.activeEffectType;
+    final activeEffectIntensity = activeFxClip?.effectIntensity ?? activeVideoClip?.effectIntensity ?? editorState.activeEffectIntensity;
+
     return Expanded(
       child: Center(
         child: AspectRatio(
@@ -303,12 +353,21 @@ class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
                         }
                       }
                     },
-                    child: filter != null
-                        ? ColorFiltered(
-                            colorFilter: filter,
-                            child: _buildVideoSurface(activeVideoClip, currentTime),
-                          )
-                        : _buildVideoSurface(activeVideoClip, currentTime),
+                    child: _applyEffectShaders(
+                      (activeTransition != null && transitionLeftClip != null && transitionRightClip != null)
+                          ? _buildTransitionSurface(
+                              activeTransition,
+                              transitionLeftClip!,
+                              transitionRightClip!,
+                              transitionProgress,
+                              currentTime,
+                            )
+                          : _buildVideoSurface(activeVideoClip, currentTime),
+                      activeEffectType,
+                      activeEffectIntensity,
+                      currentTime,
+                      filter,
+                    ),
                   ),
                 ],
 
@@ -501,10 +560,17 @@ class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
           child: VideoPlayer(_controller!),
         ),
       );
+    } else if (clip.bytes != null) {
+      surface = Image.memory(
+        clip.bytes!,
+        fit: BoxFit.cover,
+      );
     } else if (clip.filePath != null &&
         (clip.filePath!.endsWith('.jpg') ||
             clip.filePath!.endsWith('.png') ||
-            clip.filePath!.endsWith('.gif'))) {
+            clip.filePath!.endsWith('.gif') ||
+            clip.filePath!.endsWith('.jpeg') ||
+            clip.filePath!.endsWith('.webp'))) {
       surface = Image.file(
         File(clip.filePath!),
         fit: BoxFit.cover,
@@ -548,6 +614,233 @@ class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
         ),
       ),
     );
+  }
+
+  Widget _buildTransitionSurface(
+    ClipTransition tr,
+    ClipItem leftClip,
+    ClipItem rightClip,
+    double progress,
+    double currentTime,
+  ) {
+    final leftWidget = _buildVideoSurface(leftClip, currentTime);
+    final rightWidget = _buildVideoSurface(rightClip, currentTime);
+
+    switch (tr.type) {
+      case TransitionType.crossDissolve:
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            Opacity(
+              opacity: (1.0 - progress).clamp(0.0, 1.0),
+              child: leftWidget,
+            ),
+            Opacity(
+              opacity: progress.clamp(0.0, 1.0),
+              child: rightWidget,
+            ),
+          ],
+        );
+
+      case TransitionType.fadeToBlack:
+        if (progress < 0.5) {
+          final factor = (1.0 - progress * 2.0).clamp(0.0, 1.0);
+          return ColoredBox(
+            color: Colors.black,
+            child: Opacity(opacity: factor, child: leftWidget),
+          );
+        } else {
+          final factor = ((progress - 0.5) * 2.0).clamp(0.0, 1.0);
+          return ColoredBox(
+            color: Colors.black,
+            child: Opacity(opacity: factor, child: rightWidget),
+          );
+        }
+
+      case TransitionType.wipeLeft:
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            leftWidget,
+            ClipPath(
+              clipper: _WipeHorizontalClipper(progress: progress, fromRight: true),
+              child: rightWidget,
+            ),
+          ],
+        );
+
+      case TransitionType.wipeRight:
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            leftWidget,
+            ClipPath(
+              clipper: _WipeHorizontalClipper(progress: progress, fromRight: false),
+              child: rightWidget,
+            ),
+          ],
+        );
+
+      case TransitionType.zoomIn:
+        final leftScale = 1.0 + 0.6 * progress;
+        final rightScale = 0.5 + 0.5 * progress;
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            Transform.scale(
+              scale: leftScale,
+              child: Opacity(
+                opacity: (1.0 - progress).clamp(0.0, 1.0),
+                child: leftWidget,
+              ),
+            ),
+            Transform.scale(
+              scale: rightScale,
+              child: Opacity(
+                opacity: progress.clamp(0.0, 1.0),
+                child: rightWidget,
+              ),
+            ),
+          ],
+        );
+
+      case TransitionType.glitch:
+        final jitter = (math.sin(progress * 40.0) * 12.0 * (1.0 - (progress - 0.5).abs() * 2)).toDouble();
+        final currentSurface = progress < 0.5 ? leftWidget : rightWidget;
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            Transform.translate(
+              offset: Offset(jitter, 0),
+              child: currentSurface,
+            ),
+            CustomPaint(
+              foregroundPainter: _GlitchStripePainter(
+                intensity: (1.0 - (progress - 0.5).abs() * 2).clamp(0.0, 1.0),
+                seed: progress * 100,
+              ),
+            ),
+          ],
+        );
+
+      case TransitionType.none:
+      default:
+        return progress < 0.5 ? leftWidget : rightWidget;
+    }
+  }
+
+  Widget _applyEffectShaders(
+    Widget child,
+    String? effectType,
+    double intensity,
+    double currentTime,
+    ColorFilter? filter,
+  ) {
+    Widget result = child;
+    if (filter != null) {
+      result = ColorFiltered(colorFilter: filter, child: result);
+    }
+
+    if (effectType == null || effectType == 'none' || intensity <= 0) {
+      return result;
+    }
+
+    switch (effectType) {
+      case 'retro_shake':
+        final dx = math.sin(currentTime * 0.035) * 8.0 * intensity;
+        final dy = math.cos(currentTime * 0.028) * 6.0 * intensity;
+        final rot = math.sin(currentTime * 0.02) * 0.03 * intensity;
+        return Transform.translate(
+          offset: Offset(dx, dy),
+          child: Transform.rotate(
+            angle: rot,
+            child: result,
+          ),
+        );
+
+      case 'rgb_glitch':
+        final jitterX = math.sin(currentTime * 0.04) * 6.0 * intensity;
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            Transform.translate(
+              offset: Offset(jitterX, 0),
+              child: result,
+            ),
+            CustomPaint(
+              foregroundPainter: _GlitchStripePainter(
+                intensity: intensity,
+                seed: currentTime,
+              ),
+            ),
+          ],
+        );
+
+      case 'diamond_blur':
+        return ImageFiltered(
+          imageFilter: ui.ImageFilter.blur(
+            sigmaX: 8.0 * intensity,
+            sigmaY: 8.0 * intensity,
+          ),
+          child: result,
+        );
+
+      case 'film_grain':
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            result,
+            CustomPaint(
+              foregroundPainter: _FilmGrainPainter(
+                intensity: intensity,
+                seed: currentTime,
+              ),
+            ),
+          ],
+        );
+
+      case 'vhs_1984':
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            result,
+            CustomPaint(
+              foregroundPainter: _VhsScanlinePainter(
+                intensity: intensity,
+                time: currentTime,
+              ),
+            ),
+          ],
+        );
+
+      case 'edge_glow':
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            result,
+            IgnorePointer(
+              child: Container(
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: const Color(0xFF8B5CF6).withValues(alpha: 0.6 * intensity),
+                    width: 6.0 * intensity,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF8B5CF6).withValues(alpha: 0.5 * intensity),
+                      blurRadius: 20 * intensity,
+                      spreadRadius: 2 * intensity,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+
+      default:
+        return result;
+    }
   }
 
   Widget _buildEmptyProjectCanvas(BuildContext context, EditorNotifier notifier) {
@@ -620,7 +913,6 @@ class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
         ),
       ),
     );
-  }
   }
 
   Widget _buildMotionGraphicsOverlay(ClipItem clip) {
@@ -757,3 +1049,116 @@ class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
       ),
     );
   }
+}
+
+class _WipeHorizontalClipper extends CustomClipper<Path> {
+  final double progress;
+  final bool fromRight;
+
+  _WipeHorizontalClipper({required this.progress, required this.fromRight});
+
+  @override
+  Path getClip(Size size) {
+    final path = Path();
+    if (fromRight) {
+      final left = size.width * (1.0 - progress);
+      path.addRect(Rect.fromLTRB(left, 0, size.width, size.height));
+    } else {
+      final right = size.width * progress;
+      path.addRect(Rect.fromLTRB(0, 0, right, size.height));
+    }
+    return path;
+  }
+
+  @override
+  bool shouldReclip(_WipeHorizontalClipper oldClipper) =>
+      oldClipper.progress != progress || oldClipper.fromRight != fromRight;
+}
+
+class _GlitchStripePainter extends CustomPainter {
+  final double intensity;
+  final double seed;
+
+  _GlitchStripePainter({required this.intensity, required this.seed});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (intensity <= 0) return;
+    final rand = math.Random(seed.toInt() ^ 0x5F3759DF);
+    final count = (6 * intensity).toInt() + 2;
+
+    for (int i = 0; i < count; i++) {
+      final y = rand.nextDouble() * size.height;
+      final h = rand.nextDouble() * 12.0 * intensity + 2.0;
+      final offset = (rand.nextDouble() - 0.5) * 30.0 * intensity;
+      final isCyan = rand.nextBool();
+
+      final paint = Paint()
+        ..color = (isCyan ? const Color(0xFF00E5FF) : const Color(0xFFFF0055))
+            .withValues(alpha: (0.35 * intensity).clamp(0.0, 1.0))
+        ..blendMode = BlendMode.screen;
+
+      canvas.drawRect(Rect.fromLTWH(offset, y, size.width, h), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_GlitchStripePainter old) => old.seed != seed || old.intensity != intensity;
+}
+
+class _FilmGrainPainter extends CustomPainter {
+  final double intensity;
+  final double seed;
+
+  _FilmGrainPainter({required this.intensity, required this.seed});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (intensity <= 0) return;
+    final rand = math.Random((seed * 10).toInt() ^ 0x1234567);
+    final dotCount = (size.width * size.height / 350 * intensity).toInt().clamp(50, 1200);
+
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: (0.18 * intensity).clamp(0.0, 0.5))
+      ..strokeWidth = 1.2
+      ..style = PaintingStyle.fill;
+
+    for (int i = 0; i < dotCount; i++) {
+      final x = rand.nextDouble() * size.width;
+      final y = rand.nextDouble() * size.height;
+      canvas.drawCircle(Offset(x, y), 0.8, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_FilmGrainPainter old) => old.seed != seed || old.intensity != intensity;
+}
+
+class _VhsScanlinePainter extends CustomPainter {
+  final double intensity;
+  final double time;
+
+  _VhsScanlinePainter({required this.intensity, required this.time});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (intensity <= 0) return;
+    final scanlinePaint = Paint()
+      ..color = Colors.black.withValues(alpha: (0.25 * intensity).clamp(0.0, 0.6))
+      ..strokeWidth = 1.0;
+
+    for (double y = 0; y < size.height; y += 4.0) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), scanlinePaint);
+    }
+
+    final barY = (time * 0.15) % size.height;
+    final barPaint = Paint()
+      ..color = Colors.white.withValues(alpha: (0.2 * intensity).clamp(0.0, 0.4))
+      ..blendMode = BlendMode.screen;
+
+    canvas.drawRect(Rect.fromLTWH(0, barY, size.width, 14 * intensity), barPaint);
+  }
+
+  @override
+  bool shouldRepaint(_VhsScanlinePainter old) => old.time != time || old.intensity != intensity;
+}

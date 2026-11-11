@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import '../models/project_model.dart';
@@ -8,6 +9,7 @@ class PickedMediaResult {
   final TrackType type;
   final double durationMs;
   final bool isAsset;
+  final Uint8List? bytes;
 
   const PickedMediaResult({
     required this.path,
@@ -15,31 +17,35 @@ class PickedMediaResult {
     required this.type,
     this.durationMs = 5000.0,
     this.isAsset = false,
+    this.bytes,
   });
 }
 
 class MediaService {
   MediaService._();
 
-  /// Picks a video file from device storage (.mp4, .mov, .mkv, .webm, .avi)
+  /// Picks a video file from device storage (.mp4, .mov, .mkv, .webm, etc.)
   static Future<PickedMediaResult?> pickVideo() async {
     try {
-      final files = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['mp4', 'mov', 'mkv', 'webm', 'avi', '3gp', 'm4v'],
+      final file = await FilePicker.pickFile(
+        type: FileType.video,
       );
 
-      if (files.isNotEmpty) {
-        final file = files.first;
-        if (file.path != null) {
-          return PickedMediaResult(
-            path: file.path!,
-            fileName: file.name,
-            type: TrackType.video,
-            durationMs: 8000.0,
-            isAsset: false,
-          );
-        }
+      if (file != null) {
+        final p = file.path ?? file.name;
+        Uint8List? fileBytes;
+        try {
+          fileBytes = await file.readAsBytes();
+        } catch (_) {}
+
+        return PickedMediaResult(
+          path: p,
+          fileName: file.name,
+          type: TrackType.video,
+          durationMs: 8000.0,
+          isAsset: false,
+          bytes: fileBytes,
+        );
       }
     } catch (e) {
       debugPrint('MediaService.pickVideo error: $e');
@@ -50,22 +56,25 @@ class MediaService {
   /// Picks an image or GIF file from device storage (.jpg, .jpeg, .png, .gif, .webp)
   static Future<PickedMediaResult?> pickImageOrGif() async {
     try {
-      final files = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'],
+      final file = await FilePicker.pickFile(
+        type: FileType.image,
       );
 
-      if (files.isNotEmpty) {
-        final file = files.first;
-        if (file.path != null) {
-          return PickedMediaResult(
-            path: file.path!,
-            fileName: file.name,
-            type: TrackType.video,
-            durationMs: 4000.0,
-            isAsset: false,
-          );
-        }
+      if (file != null) {
+        final p = file.path ?? file.name;
+        Uint8List? fileBytes;
+        try {
+          fileBytes = await file.readAsBytes();
+        } catch (_) {}
+
+        return PickedMediaResult(
+          path: p,
+          fileName: file.name,
+          type: TrackType.image,
+          durationMs: 4000.0,
+          isAsset: false,
+          bytes: fileBytes,
+        );
       }
     } catch (e) {
       debugPrint('MediaService.pickImageOrGif error: $e');
@@ -76,22 +85,25 @@ class MediaService {
   /// Picks an audio file from device storage (.mp3, .wav, .m4a, .aac, .ogg)
   static Future<PickedMediaResult?> pickAudio() async {
     try {
-      final files = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac'],
+      final file = await FilePicker.pickFile(
+        type: FileType.audio,
       );
 
-      if (files.isNotEmpty) {
-        final file = files.first;
-        if (file.path != null) {
-          return PickedMediaResult(
-            path: file.path!,
-            fileName: file.name,
-            type: TrackType.audio,
-            durationMs: 15000.0,
-            isAsset: false,
-          );
-        }
+      if (file != null) {
+        final p = file.path ?? file.name;
+        Uint8List? fileBytes;
+        try {
+          fileBytes = await file.readAsBytes();
+        } catch (_) {}
+
+        return PickedMediaResult(
+          path: p,
+          fileName: file.name,
+          type: TrackType.audio,
+          durationMs: 15000.0,
+          isAsset: false,
+          bytes: fileBytes,
+        );
       }
     } catch (e) {
       debugPrint('MediaService.pickAudio error: $e');

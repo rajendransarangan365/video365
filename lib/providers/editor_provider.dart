@@ -345,18 +345,18 @@ class EditorNotifier extends Notifier<EditorState> {
     _recordHistory();
     final tracks = List<TrackItem>.from(state.project.tracks);
     String trackId;
-    double insertMs = state.currentTimeMs;
+    final double insertMs = state.currentTimeMs;
+    final double clipDur = media.durationMs > 0 ? media.durationMs : 5000.0;
 
     if (targetTrackId != null && tracks.any((t) => t.id == targetTrackId)) {
       trackId = targetTrackId;
     } else if (media.type == TrackType.audio || media.type == TrackType.voiceover) {
-      // Find candidate unlocked audio tracks
-      final candidateTracks = tracks.where((t) => t.type == media.type && !t.isLocked).toList();
+      // Find candidate unlocked audio tracks that do NOT overlap at insertMs
+      final candidateTracks = tracks.where((t) => (t.type == TrackType.audio || t.type == TrackType.voiceover) && !t.isLocked).toList();
       TrackItem? freeTrack;
       for (final t in candidateTracks) {
         final overlaps = t.clips.any((c) =>
-            (insertMs >= c.startMs && insertMs < c.endMs) ||
-            (insertMs + 3000 > c.startMs && insertMs < c.startMs));
+            (insertMs < c.endMs && (insertMs + clipDur) > c.startMs));
         if (!overlaps) {
           freeTrack = t;
           break;
@@ -366,7 +366,7 @@ class EditorNotifier extends Notifier<EditorState> {
       if (freeTrack != null) {
         trackId = freeTrack.id;
       } else {
-        // Create a new audio track placed directly BELOW the existing audio layers!
+        // Create a new audio track placed directly BELOW existing audio layers
         final ts2 = DateTime.now().millisecondsSinceEpoch;
         final audioCount = tracks.where((t) => t.type == TrackType.audio).length + 1;
         final newTrack = TrackItem(
@@ -381,19 +381,28 @@ class EditorNotifier extends Notifier<EditorState> {
         trackId = newTrack.id;
       }
     } else {
-      // Find first compatible unlocked track
-      final compat = tracks.firstWhere(
-        (t) => t.type == media.type && !t.isLocked,
-        orElse: () => const TrackItem(id: '', type: TrackType.video, name: ''),
-      );
-      if (compat.id.isEmpty) {
+      // Video or Image/GIF media
+      final isVideoOrImg = media.type == TrackType.video || media.type == TrackType.image;
+      final candidateTracks = tracks.where((t) => (t.type == TrackType.video || t.type == TrackType.image) && !t.isLocked).toList();
+      TrackItem? freeTrack;
+      for (final t in candidateTracks) {
+        final overlaps = t.clips.any((c) =>
+            (insertMs < c.endMs && (insertMs + clipDur) > c.startMs));
+        if (!overlaps) {
+          freeTrack = t;
+          break;
+        }
+      }
+
+      if (freeTrack != null) {
+        trackId = freeTrack.id;
+      } else if (candidateTracks.isEmpty) {
+        // Create first video track V1
         final ts2 = DateTime.now().millisecondsSinceEpoch;
-        final cnt = tracks.where((t) => t.type == media.type).length + 1;
-        final pfx = media.type.name[0].toUpperCase();
         final newT = TrackItem(
-          id: 'track_${media.type.name}_$ts2',
-          type: media.type,
-          name: '$pfx$cnt',
+          id: 'track_video_$ts2',
+          type: TrackType.video,
+          name: 'V1',
           clips: [],
         );
         final firstAudio = tracks.indexWhere((t) => t.type == TrackType.audio || t.type == TrackType.voiceover);
@@ -401,16 +410,19 @@ class EditorNotifier extends Notifier<EditorState> {
         tracks.insert(idx, newT);
         trackId = newT.id;
       } else {
-        trackId = compat.id;
-      }
-
-      final track = tracks.firstWhere((t) => t.id == trackId);
-      if (track.clips.isEmpty) {
-        insertMs = 0.0;
-      } else if (state.currentTimeMs > 0) {
-        insertMs = state.currentTimeMs;
-      } else {
-        insertMs = track.clips.map((c) => c.endMs).reduce(math.max);
+        // Overlap detected at playhead: create an overlay video track (V2, V3) at insertMs
+        final ts2 = DateTime.now().millisecondsSinceEpoch;
+        final vCount = tracks.where((t) => t.type == TrackType.video || t.type == TrackType.image).length + 1;
+        final newT = TrackItem(
+          id: 'track_video_overlay_$ts2',
+          type: TrackType.video,
+          name: 'V$vCount',
+          clips: [],
+        );
+        final firstAudio = tracks.indexWhere((t) => t.type == TrackType.audio || t.type == TrackType.voiceover);
+        final idx = firstAudio == -1 ? tracks.length : firstAudio;
+        tracks.insert(idx, newT);
+        trackId = newT.id;
       }
     }
 
@@ -420,9 +432,10 @@ class EditorNotifier extends Notifier<EditorState> {
       type: media.type,
       title: media.fileName,
       startMs: insertMs,
-      durationMs: media.durationMs > 0 ? media.durationMs : 5000.0,
+      durationMs: clipDur,
       filePath: media.isAsset ? null : media.path,
       assetPath: media.isAsset ? media.path : null,
+      bytes: media.bytes,
       isAsset: media.isAsset,
       color: _colorForType(media.type),
     );

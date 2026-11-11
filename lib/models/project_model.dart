@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 enum AspectRatioType {
@@ -212,6 +213,7 @@ class ClipItem {
   final double sourceOutMs;
   final String? assetPath;
   final String? filePath;
+  final Uint8List? bytes;
   final bool isAsset;
   final Color color;
   final double opacity;
@@ -243,6 +245,7 @@ class ClipItem {
     this.sourceOutMs = 0,
     this.assetPath,
     this.filePath,
+    this.bytes,
     this.isAsset = false,
     this.color = const Color(0xFF20C878),
     this.opacity = 1.0,
@@ -277,6 +280,7 @@ class ClipItem {
     double? sourceOutMs,
     String? assetPath,
     String? filePath,
+    Uint8List? bytes,
     bool? isAsset,
     Color? color,
     double? opacity,
@@ -308,6 +312,7 @@ class ClipItem {
       sourceOutMs: sourceOutMs ?? this.sourceOutMs,
       assetPath: assetPath ?? this.assetPath,
       filePath: filePath ?? this.filePath,
+      bytes: bytes ?? this.bytes,
       isAsset: isAsset ?? this.isAsset,
       color: color ?? this.color,
       opacity: opacity ?? this.opacity,
