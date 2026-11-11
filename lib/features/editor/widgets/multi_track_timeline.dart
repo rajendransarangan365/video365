@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/video365_colors.dart';
 import '../../../models/project_model.dart';
@@ -93,15 +94,32 @@ class _MultiTrackTimelineState extends ConsumerState<MultiTrackTimeline> {
     }
   }
 
-  void _onTimelinePanUpdate(DragUpdateDetails details) {
-    if (!_hScroll.hasClients) return;
-    final ed = ref.read(editorProvider);
-    _isScrubbing = true;
-    final timeMs = (details.localPosition.dx / _pixelsPerMs).clamp(0.0, ed.project.durationMs);
-    ref.read(editorProvider.notifier).seekTo(timeMs);
+  double _baseZoomScale = 1.0;
+
+  void _onScaleStart(ScaleStartDetails details) {
+    _baseZoomScale = ref.read(editorProvider).zoomScale;
+    if (details.pointerCount == 1) {
+      _isScrubbing = true;
+    }
   }
 
-  void _onTimelinePanEnd(DragEndDetails _) {
+  void _onScaleUpdate(ScaleUpdateDetails details) {
+    final notifier = ref.read(editorProvider.notifier);
+    final ed = ref.read(editorProvider);
+
+    if (details.pointerCount > 1) {
+      // Two-finger pinch to zoom in/out!
+      final newScale = (_baseZoomScale * details.scale).clamp(0.2, 8.0);
+      notifier.setZoomScale(newScale);
+    } else {
+      // Single finger drag to scrub playhead!
+      _isScrubbing = true;
+      final timeMs = (details.localFocalPoint.dx / _pixelsPerMs).clamp(0.0, ed.project.durationMs);
+      notifier.seekTo(timeMs);
+    }
+  }
+
+  void _onScaleEnd(ScaleEndDetails _) {
     _isScrubbing = false;
   }
 
@@ -201,8 +219,9 @@ class _MultiTrackTimelineState extends ConsumerState<MultiTrackTimeline> {
                               physics: const BouncingScrollPhysics(),
                               child: GestureDetector(
                                 onTapUp: (d) => _onTimelineTap(d, viewW),
-                                onPanUpdate: _onTimelinePanUpdate,
-                                onPanEnd: _onTimelinePanEnd,
+                                onScaleStart: _onScaleStart,
+                                onScaleUpdate: _onScaleUpdate,
+                                onScaleEnd: _onScaleEnd,
                                 child: Column(
                                   children: [
                                     // Ruler
@@ -624,6 +643,9 @@ class _TrackClipRow extends StatelessWidget {
                     final left = clip.startMs * ppm;
                     final width = math.max(clip.durationMs * ppm, 24.0);
                     final isSelected = editorState.selectedClipId == clip.id;
+                    final notifier = editorState.project.tracks.isNotEmpty
+                        ? (clip) // reference
+                        : null;
 
                     return Positioned(
                       left: left,
@@ -638,6 +660,7 @@ class _TrackClipRow extends StatelessWidget {
                           height: _height - 4,
                           isSelected: isSelected,
                           trackType: track.type,
+                          ppm: ppm,
                         ),
                       ),
                     );
@@ -690,12 +713,13 @@ class _EmptyTrackHint extends StatelessWidget {
 }
 
 // ─── Clip Block ───────────────────────────────────────────────────────────────
-class _ClipBlock extends StatelessWidget {
+class _ClipBlock extends ConsumerWidget {
   final ClipItem clip;
   final double width;
   final double height;
   final bool isSelected;
   final TrackType trackType;
+  final double ppm;
 
   const _ClipBlock({
     required this.clip,
@@ -703,24 +727,26 @@ class _ClipBlock extends StatelessWidget {
     required this.height,
     required this.isSelected,
     required this.trackType,
+    required this.ppm,
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final notifier = ref.read(editorProvider.notifier);
     final isAudio = trackType == TrackType.audio || trackType == TrackType.voiceover;
     final isVideo = trackType == TrackType.video || trackType == TrackType.image;
 
     return Container(
       width: width,
       decoration: BoxDecoration(
-        color: clip.color.withOpacity(0.80),
-        borderRadius: BorderRadius.circular(5),
+        color: clip.color.withValues(alpha: 0.85),
+        borderRadius: BorderRadius.circular(6),
         border: Border.all(
           color: isSelected ? Colors.white : clip.color,
-          width: isSelected ? 1.8 : 0.8,
+          width: isSelected ? 2.0 : 0.8,
         ),
         boxShadow: isSelected
-            ? [BoxShadow(color: clip.color.withOpacity(0.5), blurRadius: 6)]
+            ? [BoxShadow(color: clip.color.withValues(alpha: 0.5), blurRadius: 8)]
             : null,
       ),
       clipBehavior: Clip.antiAlias,
@@ -730,7 +756,7 @@ class _ClipBlock extends StatelessWidget {
           if (isAudio)
             Positioned.fill(
               child: CustomPaint(
-                painter: _WaveformPainter(color: Colors.white.withOpacity(0.35)),
+                painter: _WaveformPainter(color: Colors.white.withValues(alpha: 0.40)),
               ),
             ),
 
@@ -744,14 +770,14 @@ class _ClipBlock extends StatelessWidget {
                     width: 32,
                     decoration: BoxDecoration(
                       border: Border(
-                        right: BorderSide(color: Colors.black.withOpacity(0.3), width: 0.5),
+                        right: BorderSide(color: Colors.black.withValues(alpha: 0.3), width: 0.5),
                       ),
                     ),
                     child: Center(
                       child: Icon(
                         Icons.image_outlined,
                         size: 10,
-                        color: Colors.white.withOpacity(0.25),
+                        color: Colors.white.withValues(alpha: 0.25),
                       ),
                     ),
                   ),
@@ -759,13 +785,13 @@ class _ClipBlock extends StatelessWidget {
               ),
             ),
 
-          // Clip label
+          // Clip title
           if (width > 28)
             Positioned(
-              left: 4,
+              left: isSelected ? 14 : 6,
               top: 0,
               bottom: 0,
-              right: 4,
+              right: isSelected ? 14 : 6,
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
@@ -782,37 +808,65 @@ class _ClipBlock extends StatelessWidget {
               ),
             ),
 
-          // Selection left handle
+          // Clip Body Gesture Handler (Drag to Move along timeline & Long Press)
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: () => notifier.selectClip(clip.id),
+              onDoubleTap: () => notifier.selectClip(clip.id),
+              onLongPress: () {
+                HapticFeedback.heavyImpact();
+                notifier.selectClip(clip.id);
+                notifier.setBottomTool(BottomTool.trim);
+              },
+              onHorizontalDragUpdate: isSelected
+                  ? (details) {
+                      final deltaMs = details.delta.dx / ppm;
+                      notifier.moveClip(clip.id, clip.startMs + deltaMs);
+                    }
+                  : null,
+            ),
+          ),
+
+          // Selection Left Trim Handle (Drag to Trim Start)
           if (isSelected)
             Positioned(
               left: 0,
               top: 0,
               bottom: 0,
-              child: Container(
-                width: 4,
-                decoration: BoxDecoration(
+              width: 14,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onHorizontalDragUpdate: (details) {
+                  final deltaMs = details.delta.dx / ppm;
+                  notifier.trimClipStart(clip.id, clip.startMs + deltaMs);
+                },
+                child: Container(
                   color: Colors.white,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(5),
-                    bottomLeft: Radius.circular(5),
+                  child: const Center(
+                    child: Icon(Icons.drag_indicator_rounded, size: 10, color: Colors.black),
                   ),
                 ),
               ),
             ),
 
-          // Selection right handle
+          // Selection Right Trim Handle (Drag to Trim End)
           if (isSelected)
             Positioned(
               right: 0,
               top: 0,
               bottom: 0,
-              child: Container(
-                width: 4,
-                decoration: BoxDecoration(
+              width: 14,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onHorizontalDragUpdate: (details) {
+                  final deltaMs = details.delta.dx / ppm;
+                  notifier.trimClipEnd(clip.id, clip.endMs + deltaMs);
+                },
+                child: Container(
                   color: Colors.white,
-                  borderRadius: const BorderRadius.only(
-                    topRight: Radius.circular(5),
-                    bottomRight: Radius.circular(5),
+                  child: const Center(
+                    child: Icon(Icons.drag_indicator_rounded, size: 10, color: Colors.black),
                   ),
                 ),
               ),

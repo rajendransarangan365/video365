@@ -67,20 +67,36 @@ class EditorScreen extends ConsumerWidget {
 
             // Modal Layer 1: Media Import Sheet
             if (editorState.isMediaBrowserOpen)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: const MediaImportSheet(),
+              Positioned.fill(
+                child: GestureDetector(
+                  onTap: () => ref.read(editorProvider.notifier).toggleMediaBrowser(),
+                  behavior: HitTestBehavior.opaque,
+                  child: Container(
+                    color: Colors.black.withValues(alpha: 0.6),
+                    alignment: Alignment.bottomCenter,
+                    child: GestureDetector(
+                      onTap: () {},
+                      child: const MediaImportSheet(),
+                    ),
+                  ),
+                ),
               ),
 
             // Modal Layer 1.5: Add Track Sheet
             if (editorState.isAddTrackSheetOpen)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: const AddTrackSheet(),
+              Positioned.fill(
+                child: GestureDetector(
+                  onTap: () => ref.read(editorProvider.notifier).toggleAddTrackSheet(),
+                  behavior: HitTestBehavior.opaque,
+                  child: Container(
+                    color: Colors.black.withValues(alpha: 0.6),
+                    alignment: Alignment.bottomCenter,
+                    child: GestureDetector(
+                      onTap: () {},
+                      child: const AddTrackSheet(),
+                    ),
+                  ),
+                ),
               ),
 
             // Modal Layer 2: Radial Editing Wheel

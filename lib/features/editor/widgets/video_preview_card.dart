@@ -209,10 +209,20 @@ class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
                   // CLEAN EMPTY STATE (No fake videos!)
                   _buildEmptyProjectCanvas(context, editorNotifier),
                 ] else ...[
-                  // ACTIVE VIDEO VIEWPORT
+                  // ACTIVE VIDEO VIEWPORT (Touch Gestures: Drag to Move, Pinch to Scale, Double-Tap Play/Pause)
                   GestureDetector(
-                    onTap: () => editorNotifier.togglePlay(),
                     behavior: HitTestBehavior.opaque,
+                    onTap: () => editorNotifier.togglePlay(),
+                    onDoubleTap: () => editorNotifier.togglePlay(),
+                    onScaleUpdate: (details) {
+                      if (activeVideoClip != null && activeVideoClip.id.isNotEmpty) {
+                        if (details.pointerCount == 1) {
+                          editorNotifier.updateClipPosition(activeVideoClip.id, details.focalPointDelta);
+                        } else if (details.pointerCount > 1 && details.scale != 1.0) {
+                          editorNotifier.updateClipScale(activeVideoClip.id, details.scale);
+                        }
+                      }
+                    },
                     child: filter != null
                         ? ColorFiltered(
                             colorFilter: filter,
@@ -294,8 +304,9 @@ class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
   }
 
   Widget _buildVideoSurface(ClipItem clip) {
+    Widget surface;
     if (_isInitialized && _controller != null) {
-      return FittedBox(
+      surface = FittedBox(
         fit: BoxFit.cover,
         child: SizedBox(
           width: _controller!.value.size.width,
@@ -303,32 +314,38 @@ class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
           child: VideoPlayer(_controller!),
         ),
       );
-    }
-
-    if (clip.filePath != null &&
+    } else if (clip.filePath != null &&
         (clip.filePath!.endsWith('.jpg') ||
             clip.filePath!.endsWith('.png') ||
             clip.filePath!.endsWith('.gif'))) {
-      return Image.file(
+      surface = Image.file(
         File(clip.filePath!),
         fit: BoxFit.cover,
       );
+    } else {
+      surface = Container(
+        color: const Color(0xFF131722),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.movie_creation_outlined, size: 36, color: Video365Colors.activeGreen),
+              const SizedBox(height: 6),
+              Text(
+                clip.title,
+                style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
-    return Container(
-      color: const Color(0xFF131722),
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.movie_creation_outlined, size: 36, color: Video365Colors.activeGreen),
-            const SizedBox(height: 6),
-            Text(
-              clip.title,
-              style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
+    return Transform.translate(
+      offset: clip.position,
+      child: Transform.scale(
+        scale: clip.scale,
+        child: surface,
       ),
     );
   }
@@ -343,71 +360,60 @@ class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
         ),
       ),
       child: Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 60,
-                height: 60,
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Video365Colors.activeGreen.withOpacity(0.12),
-                  border: Border.all(color: Video365Colors.activeGreen.withOpacity(0.4), width: 1.5),
+                  color: Video365Colors.activeGreen.withValues(alpha: 0.12),
+                  border: Border.all(color: Video365Colors.activeGreen.withValues(alpha: 0.4), width: 1.5),
                 ),
                 alignment: Alignment.center,
                 child: const Icon(
                   Icons.video_call_outlined,
-                  size: 32,
+                  size: 24,
                   color: Video365Colors.activeGreen,
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
               const Text(
                 'Start Your Project',
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 16,
+                  fontSize: 14,
                   fontWeight: FontWeight.w700,
                   letterSpacing: -0.3,
                 ),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               const Text(
-                'Import a video, photo, or GIF from your mobile device to begin editing.',
+                'Import a video, photo, or GIF to begin editing.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Video365Colors.secondaryText,
-                  fontSize: 12,
-                  height: 1.35,
+                  fontSize: 11,
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 12),
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Video365Colors.activeGreen,
                   foregroundColor: const Color(0xFF080A0E),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 ),
-                icon: const Icon(Icons.add_photo_alternate_outlined, size: 18),
+                icon: const Icon(Icons.add_photo_alternate_outlined, size: 16),
                 label: const Text(
                   'Import Media',
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
                 ),
                 onPressed: () => notifier.toggleMediaBrowser(),
-              ),
-              const SizedBox(height: 10),
-              TextButton(
-                onPressed: () {
-                  final stock = MediaService.getBundledStockMedia().first;
-                  notifier.addMediaClip(stock);
-                },
-                child: const Text(
-                  'Or load sample 4K video',
-                  style: TextStyle(color: Video365Colors.secondaryText, fontSize: 12),
-                ),
               ),
             ],
           ),
@@ -415,23 +421,25 @@ class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
       ),
     );
   }
+  }
 
   Widget _buildMotionGraphicsOverlay(ClipItem clip) {
     final type = clip.motionGraphicsType ?? 'lower_third_minimal';
+    Widget overlay;
 
     if (type == 'cyber_tag') {
-      return Positioned(
+      overlay = Positioned(
         bottom: 60,
         left: 20,
         right: 20,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.8),
+            color: Colors.black.withValues(alpha: 0.8),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: clip.color, width: 2),
             boxShadow: [
-              BoxShadow(color: clip.color.withOpacity(0.4), blurRadius: 12),
+              BoxShadow(color: clip.color.withValues(alpha: 0.4), blurRadius: 12),
             ],
           ),
           child: Column(
@@ -463,10 +471,8 @@ class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
           ),
         ),
       );
-    }
-
-    if (type == 'kinetic_punch') {
-      return Center(
+    } else if (type == 'kinetic_punch') {
+      overlay = Center(
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
@@ -484,63 +490,70 @@ class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
           ),
         ),
       );
-    }
-
-    // Default: lower_third_minimal (clean accent vertical bar)
-    return Positioned(
-      bottom: 55,
-      left: 20,
-      right: 20,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.65),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 4,
-              height: 38,
-              decoration: BoxDecoration(
-                color: clip.color,
-                borderRadius: BorderRadius.circular(2),
+    } else {
+      // Default: lower_third_minimal (clean accent vertical bar)
+      overlay = Positioned(
+        bottom: 55,
+        left: 20,
+        right: 20,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.65),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 4,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: clip.color,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    clip.textContent ?? '',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: clip.fontSize * 0.75,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.2,
-                    ),
-                  ),
-                  if (clip.subtitleContent != null && clip.subtitleContent!.isNotEmpty) ...[
-                    const SizedBox(height: 2),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                     Text(
-                      clip.subtitleContent!,
-                      style: const TextStyle(
-                        color: Video365Colors.secondaryText,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 1.0,
+                      clip.textContent ?? '',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: clip.fontSize * 0.75,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.2,
                       ),
                     ),
+                    if (clip.subtitleContent != null && clip.subtitleContent!.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        clip.subtitleContent!,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.7),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
+      );
+    }
+
+    return Transform.translate(
+      offset: clip.position,
+      child: Transform.scale(
+        scale: clip.scale,
+        child: overlay,
       ),
     );
   }
-}

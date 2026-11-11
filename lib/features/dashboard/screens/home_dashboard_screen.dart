@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/video365_colors.dart';
 import '../../../models/project_model.dart';
 import '../../../providers/editor_provider.dart';
+import '../../../services/permission_service.dart';
 import '../../editor/screens/editor_screen.dart';
 
 class HomeDashboardScreen extends ConsumerStatefulWidget {
@@ -14,6 +15,14 @@ class HomeDashboardScreen extends ConsumerStatefulWidget {
 
 class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
   int _selectedTab = 0; // 0 = Studio, 1 = Quick Edit
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      PermissionService.requestAllPermissions(context);
+    });
+  }
 
   void _openEditor(BuildContext context) {
     Navigator.of(context).push(

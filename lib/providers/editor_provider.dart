@@ -475,6 +475,36 @@ class EditorNotifier extends Notifier<EditorState> {
     _recalcDuration();
   }
 
+  void trimClipStart(String clipId, double newStartMs) {
+    updateClip(clipId, (c) {
+      final safeStart = math.max(0.0, newStartMs);
+      final delta = safeStart - c.startMs;
+      final newDur = math.max(300.0, c.durationMs - delta);
+      return c.copyWith(
+        startMs: safeStart,
+        durationMs: newDur,
+        sourceInMs: math.max(0.0, c.sourceInMs + delta),
+      );
+    });
+    _recalcDuration();
+  }
+
+  void trimClipEnd(String clipId, double newEndMs) {
+    updateClip(clipId, (c) {
+      final newDur = math.max(300.0, newEndMs - c.startMs);
+      return c.copyWith(durationMs: newDur);
+    });
+    _recalcDuration();
+  }
+
+  void updateClipPosition(String clipId, Offset delta) {
+    updateClip(clipId, (c) => c.copyWith(position: c.position + delta));
+  }
+
+  void updateClipScale(String clipId, double scaleFactor) {
+    updateClip(clipId, (c) => c.copyWith(scale: (c.scale * scaleFactor).clamp(0.2, 5.0)));
+  }
+
   void _recalcDuration() {
     final max = _calcMax(state.project.tracks);
     state = state.copyWith(project: state.project.copyWith(durationMs: max));
