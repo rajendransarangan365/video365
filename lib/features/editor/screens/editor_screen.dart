@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/video365_colors.dart';
 import '../../../models/project_model.dart';
@@ -97,6 +98,47 @@ class EditorScreen extends ConsumerWidget {
                 const BottomToolBar(),
               ],
             ),
+
+            // Floating Radial Wheel FAB (Click to expand radial menu)
+            if (!editorState.isRadialMenuOpen && !editorState.isCaptionsSheetOpen && !editorState.isExportSheetOpen)
+              Positioned(
+                right: 14,
+                bottom: 80,
+                child: GestureDetector(
+                  onTap: () {
+                    HapticFeedback.heavyImpact();
+                    ref.read(editorProvider.notifier).toggleRadialMenu();
+                  },
+                  child: Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF131722),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Video365Colors.activeGreen, width: 2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Video365Colors.activeGreen.withValues(alpha: 0.35),
+                          blurRadius: 10,
+                          spreadRadius: 1,
+                        ),
+                        const BoxShadow(
+                          color: Colors.black87,
+                          blurRadius: 8,
+                          offset: Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: const Center(
+                      child: Icon(
+                        Icons.album_outlined,
+                        color: Video365Colors.activeGreen,
+                        size: 24,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
 
             // Modal Layer 1: Media Import Sheet
             if (editorState.isMediaBrowserOpen)

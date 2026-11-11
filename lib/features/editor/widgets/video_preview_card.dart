@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -305,9 +306,9 @@ class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
                     child: filter != null
                         ? ColorFiltered(
                             colorFilter: filter,
-                            child: _buildVideoSurface(activeVideoClip),
+                            child: _buildVideoSurface(activeVideoClip, currentTime),
                           )
-                        : _buildVideoSurface(activeVideoClip),
+                        : _buildVideoSurface(activeVideoClip, currentTime),
                   ),
                 ],
 
@@ -489,7 +490,7 @@ class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
     );
   }
 
-  Widget _buildVideoSurface(ClipItem clip) {
+  Widget _buildVideoSurface(ClipItem clip, double currentTimeMs) {
     Widget surface;
     if (_isInitialized && _controller != null) {
       surface = FittedBox(
@@ -527,11 +528,24 @@ class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
       );
     }
 
+    final relMs = (currentTimeMs - clip.startMs).clamp(0.0, clip.durationMs);
+    final dynScale = clip.evaluateProperty(KeyframeProperty.scale, relMs, clip.scale);
+    final dynOpacity = clip.evaluateProperty(KeyframeProperty.opacity, relMs, clip.opacity).clamp(0.0, 1.0);
+    final dynRot = clip.evaluateProperty(KeyframeProperty.rotation, relMs, clip.rotation);
+    final dynPosX = clip.evaluateProperty(KeyframeProperty.positionX, relMs, clip.position.dx);
+    final dynPosY = clip.evaluateProperty(KeyframeProperty.positionY, relMs, clip.position.dy);
+
     return Transform.translate(
-      offset: clip.position,
-      child: Transform.scale(
-        scale: clip.scale,
-        child: surface,
+      offset: Offset(dynPosX, dynPosY),
+      child: Transform.rotate(
+        angle: dynRot * (math.pi / 180),
+        child: Transform.scale(
+          scale: dynScale,
+          child: Opacity(
+            opacity: dynOpacity,
+            child: surface,
+          ),
+        ),
       ),
     );
   }

@@ -724,11 +724,198 @@ class EditorNotifier extends Notifier<EditorState> {
     final updatedTracks = state.project.tracks.map((t) {
       return t.copyWith(clips: t.clips.where((c) => c.id != clipId).toList());
     }).toList();
+    // Also remove associated transitions
+    final updatedTransitions = state.project.transitions
+        .where((tr) => tr.leftClipId != clipId && tr.rightClipId != clipId)
+        .toList();
     state = state.copyWith(
-      project: state.project.copyWith(tracks: updatedTracks, durationMs: _calcMax(updatedTracks)),
+      project: state.project.copyWith(
+        tracks: updatedTracks,
+        transitions: updatedTransitions,
+        durationMs: _calcMax(updatedTracks),
+      ),
       clearSelectedClip: true,
       clearSelectedTrack: true,
     );
+  }
+
+  void duplicateClip(String clipId) {
+    _recordHistory();
+    for (final track in state.project.tracks) {
+      final idx = track.clips.indexWhere((c) => c.id == clipId);
+      if (idx != -1) {
+        final orig = track.clips[idx];
+        final cloned = orig.copyWith(
+          id: 'clip_${DateTime.now().millisecondsSinceEpoch}',
+          title: '${orig.title} (Copy)',
+          startMs: orig.endMs,
+        );
+        final newClips = List<ClipItem>.from(track.clips);
+        newClips.insert(idx + 1, cloned);
+        final updatedTracks = state.project.tracks.map((t) {
+          if (t.id == track.id) return t.copyWith(clips: newClips);
+          return t;
+        }).toList();
+        state = state.copyWith(
+          project: state.project.copyWith(
+            tracks: updatedTracks,
+            durationMs: _calcMax(updatedTracks),
+          ),
+          selectedClipId: cloned.id,
+          selectedTrackId: track.id,
+        );
+        return;
+      }
+    }
+  }
+
+  void extractAudioFromClip(String videoClipId) {
+    _recordHistory();
+    ClipItem? videoClip;
+    for (final t in state.project.tracks) {
+      for (final c in t.clips) {
+        if (c.id == videoClipId) {
+          videoClip = c;
+          break;
+        }
+      }
+      if (videoClip != null) break;
+    }
+    if (videoClip == null) return;
+
+    // Find first unlocked audio track or create new audio track below video
+    final tracks = List<TrackItem>.from(state.project.tracks);
+    TrackItem? targetAudioTrack = tracks.firstWhere(
+      (t) => (t.type == TrackType.audio || t.type == TrackType.voiceover) && !t.isLocked,
+      orElse: () => const TrackItem(id: '', type: TrackType.audio, name: ''),
+    );
+
+    String targetAudioTrackId;
+    if (targetAudioTrack.id.isEmpty) {
+      final ts = DateTime.now().millisecondsSinceEpoch;
+      final newAudioTrack = TrackItem(
+        id: 'track_a1_$ts',
+        type: TrackType.audio,
+        name: 'A1',
+        clips: [],
+      );
+      tracks.add(newAudioTrack);
+      targetAudioTrackId = newAudioTrack.id;
+    } else {
+      targetAudioTrackId = targetAudioTrack.id;
+    }
+
+    // Create extracted audio clip
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    final audioClip = ClipItem(
+      id: 'clip_extracted_audio_$ts',
+      trackId: targetAudioTrackId,
+      type: TrackType.audio,
+      title: '${videoClip.title} [Audio]',
+      startMs: videoClip.startMs,
+      durationMs: videoClip.durationMs,
+      sourceInMs: videoClip.sourceInMs,
+      sourceOutMs: videoClip.sourceOutMs,
+      filePath: videoClip.filePath,
+      assetPath: videoClip.assetPath,
+      isAsset: videoClip.isAsset,
+      color: const Color(0xFF4F46E5),
+      volume: 1.0,
+    );
+
+    // Mute original video clip so audio isn't doubled
+    final updatedTracks = tracks.map((t) {
+      final updatedClips = t.clips.map((c) {
+        if (c.id == videoClipId) {
+          return c.copyWith(volume: 0.0);
+        }
+        return c;
+      }).toList();
+
+      if (t.id == targetAudioTrackId) {
+        return t.copyWith(clips: [...updatedClips, audioClip]);
+      }
+      return t.copyWith(clips: updatedClips);
+    }).toList();
+
+    state = state.copyWith(
+      project: state.project.copyWith(
+        tracks: updatedTracks,
+        durationMs: _calcMax(updatedTracks),
+      ),
+      selectedClipId: audioClip.id,
+      selectedTrackId: targetAudioTrackId,
+    );
+  }
+
+  void applyTransition(String leftClipId, String rightClipId, TransitionType type, double durationMs) {
+    _recordHistory();
+    final transitions = List<ClipTransition>.from(state.project.transitions);
+    final existingIdx = transitions.indexWhere(
+      (tr) => tr.leftClipId == leftClipId && tr.rightClipId == rightClipId,
+    );
+
+    if (type == TransitionType.none) {
+      if (existingIdx != -1) {
+        transitions.removeAt(existingIdx);
+      }
+    } else {
+      final newTr = ClipTransition(
+        id: 'tr_${DateTime.now().millisecondsSinceEpoch}',
+        leftClipId: leftClipId,
+        rightClipId: rightClipId,
+        type: type,
+        durationMs: durationMs,
+      );
+      if (existingIdx != -1) {
+        transitions[existingIdx] = newTr;
+      } else {
+        transitions.add(newTr);
+      }
+    }
+
+    state = state.copyWith(
+      project: state.project.copyWith(transitions: transitions),
+    );
+  }
+
+  void addOrUpdateKeyframe(
+    String clipId,
+    KeyframeProperty property,
+    double value, {
+    String easing = 'easeInOut',
+  }) {
+    _recordHistory();
+    updateClip(clipId, (clip) {
+      final relMs = (state.currentTimeMs - clip.startMs).clamp(0.0, clip.durationMs);
+      final keyframes = List<Keyframe>.from(clip.keyframes);
+      final existingIdx = keyframes.indexWhere(
+        (k) => k.property == property && (k.timeMs - relMs).abs() < 50,
+      );
+
+      final kf = Keyframe(
+        timeMs: relMs,
+        value: value,
+        property: property,
+        easing: easing,
+      );
+
+      if (existingIdx != -1) {
+        keyframes[existingIdx] = kf;
+      } else {
+        keyframes.add(kf);
+      }
+      keyframes.sort((a, b) => a.timeMs.compareTo(b.timeMs));
+      return clip.copyWith(keyframes: keyframes);
+    });
+  }
+
+  void removeKeyframe(String clipId, Keyframe keyframe) {
+    _recordHistory();
+    updateClip(clipId, (clip) {
+      final keyframes = clip.keyframes.where((k) => k != keyframe).toList();
+      return clip.copyWith(keyframes: keyframes);
+    });
   }
 
   void setClipSpeed(double speed) {

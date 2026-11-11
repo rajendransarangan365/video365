@@ -25,30 +25,36 @@ class MultiTrackTimeline extends ConsumerStatefulWidget {
 
 class _MultiTrackTimelineState extends ConsumerState<MultiTrackTimeline> {
   final ScrollController _hScroll = ScrollController();
+  final ScrollController _rulerHScroll = ScrollController();
   final ScrollController _vScroll = ScrollController();
-  final ScrollController _headerVScroll = ScrollController();
   bool _isScrubbing = false;
 
   @override
   void initState() {
     super.initState();
-    _vScroll.addListener(_syncVerticalScroll);
+    _hScroll.addListener(_syncHScrollToRuler);
+    _rulerHScroll.addListener(_syncRulerToHScroll);
   }
 
-  void _syncVerticalScroll() {
-    if (_vScroll.hasClients && _headerVScroll.hasClients) {
-      if (_headerVScroll.offset != _vScroll.offset) {
-        _headerVScroll.jumpTo(_vScroll.offset.clamp(0.0, _headerVScroll.position.maxScrollExtent));
-      }
+  void _syncHScrollToRuler() {
+    if (_rulerHScroll.hasClients && _rulerHScroll.offset != _hScroll.offset) {
+      _rulerHScroll.jumpTo(_hScroll.offset.clamp(0.0, _rulerHScroll.position.maxScrollExtent));
+    }
+  }
+
+  void _syncRulerToHScroll() {
+    if (_hScroll.hasClients && _hScroll.offset != _rulerHScroll.offset) {
+      _hScroll.jumpTo(_rulerHScroll.offset.clamp(0.0, _hScroll.position.maxScrollExtent));
     }
   }
 
   @override
   void dispose() {
-    _vScroll.removeListener(_syncVerticalScroll);
+    _hScroll.removeListener(_syncHScrollToRuler);
+    _rulerHScroll.removeListener(_syncRulerToHScroll);
     _hScroll.dispose();
+    _rulerHScroll.dispose();
     _vScroll.dispose();
-    _headerVScroll.dispose();
     super.dispose();
   }
 
@@ -68,7 +74,7 @@ class _MultiTrackTimelineState extends ConsumerState<MultiTrackTimeline> {
     HapticFeedback.selectionClick();
 
     // Hit test tracks and clips
-    double currentY = _kRulerHeight;
+    double currentY = 0.0;
     String? hitClipId;
     String? hitTrackId;
 
@@ -89,8 +95,7 @@ class _MultiTrackTimelineState extends ConsumerState<MultiTrackTimeline> {
 
     if (hitClipId != null) {
       notifier.selectClip(hitClipId, trackId: hitTrackId);
-    } else if (localY > _kRulerHeight) {
-      // Tapped empty track area
+    } else {
       notifier.selectClip(null, trackId: hitTrackId);
     }
   }
@@ -131,7 +136,6 @@ class _MultiTrackTimelineState extends ConsumerState<MultiTrackTimeline> {
     final visibleLeft = scrollOffset;
     final visibleRight = scrollOffset + viewportWidth;
 
-    // Smooth auto-scroll during playback to keep needle within comfortable view
     if (playheadX > visibleRight - 60 || playheadX < visibleLeft) {
       final target = (playheadX - viewportWidth * 0.35).clamp(0.0, _hScroll.position.maxScrollExtent);
       _hScroll.animateTo(target, duration: const Duration(milliseconds: 100), curve: Curves.linear);
@@ -161,64 +165,100 @@ class _MultiTrackTimelineState extends ConsumerState<MultiTrackTimeline> {
         // ── 1. Timeline Top Toolbar (Matching Reference Image 1 & 2) ──────
         _TimelineToolbar(notifier: notifier, editorState: ed),
 
-        // ── 2. Main Timeline Body ─────────────────────────────────────────
-        Expanded(
+        // ── 2. Sticky Ruler Header Bar (Height 26px, Left Button + Right Ruler) ──
+        Container(
+          height: _kRulerHeight,
+          decoration: const BoxDecoration(
+            color: Color(0xFF090C12),
+            border: Border(bottom: BorderSide(color: Color(0xFF1E2536), width: 1)),
+          ),
           child: Row(
             children: [
-              // Left: Track Headers (Fixed Column)
-              SizedBox(
-                width: _kTrackHeaderWidth,
-                child: Column(
-                  children: [
-                    // Ruler header corner: Quick + Track button
-                    _AddTrackCornerButton(
-                      onTap: () => notifier.toggleAddTrackSheet(),
-                    ),
-                    // Track headers list (synced vertical scroll)
-                    Expanded(
-                      child: SingleChildScrollView(
-                        controller: _headerVScroll,
-                        physics: const NeverScrollableScrollPhysics(),
-                        child: Column(
-                          children: tracks.map((track) {
-                            final height = _trackHeight(track.type);
-                            return _TrackHeader(
-                              key: ValueKey('header_${track.id}'),
-                              track: track,
-                              height: height,
-                              isSelected: ed.selectedTrackId == track.id,
-                              onMute: () => notifier.toggleTrackMute(track.id),
-                              onLock: () => notifier.toggleTrackLock(track.id),
-                              onDelete: () => notifier.removeTrack(track.id),
-                              onTap: () => notifier.selectClip(null, trackId: track.id),
-                            );
-                          }).toList(),
+              // Ruler header corner: Quick + Track button
+              _AddTrackCornerButton(
+                onTap: () => notifier.toggleAddTrackSheet(),
+              ),
+              // Horizontally scrolled ruler synced with tracks canvas
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  controller: _rulerHScroll,
+                  physics: const ClampingScrollPhysics(),
+                  child: SizedBox(
+                    width: totalW,
+                    height: _kRulerHeight,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        _TimelineRuler(
+                          totalW: totalW,
+                          durationMs: durationMs,
+                          ppm: ppm,
+                          onSeek: (ms) => notifier.seekTo(ms),
                         ),
-                      ),
+                        // Playhead Needle Capsule Head
+                        Positioned(
+                          left: (ed.currentTimeMs * ppm) - 24,
+                          top: 0,
+                          bottom: 0,
+                          width: 48,
+                          child: _PlayheadCapsuleHead(
+                            currentTimeMs: ed.currentTimeMs,
+                            ppm: ppm,
+                            onSeek: (ms) => notifier.seekTo(ms),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
+            ],
+          ),
+        ),
 
-              // Right: Horizontally Scrollable Tracks with In-Sync Needle
-              Expanded(
-                child: LayoutBuilder(
-                  builder: (ctx, constraints) {
-                    final viewW = constraints.maxWidth;
-                    return SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      controller: _hScroll,
-                      physics: const BouncingScrollPhysics(),
-                      child: SizedBox(
-                        width: totalW,
-                        child: Stack(
-                          children: [
-                            // 2.1 Tracks & Ruler Content
-                            SingleChildScrollView(
-                              scrollDirection: Axis.vertical,
-                              controller: _vScroll,
-                              physics: const BouncingScrollPhysics(),
-                              child: GestureDetector(
+        // ── 3. Main Tracks Canvas (Headers & Clip Rows in 100% 1:1 Pixel Sync) ──
+        Expanded(
+          child: SingleChildScrollView(
+            controller: _vScroll,
+            physics: const BouncingScrollPhysics(),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Left: Track Headers (V1, A1, etc.)
+                SizedBox(
+                  width: _kTrackHeaderWidth,
+                  child: Column(
+                    children: tracks.map((track) {
+                      final height = _trackHeight(track.type);
+                      return _TrackHeader(
+                        key: ValueKey('header_${track.id}'),
+                        track: track,
+                        height: height,
+                        isSelected: ed.selectedTrackId == track.id,
+                        onMute: () => notifier.toggleTrackMute(track.id),
+                        onLock: () => notifier.toggleTrackLock(track.id),
+                        onDelete: () => notifier.removeTrack(track.id),
+                        onTap: () => notifier.selectClip(null, trackId: track.id),
+                      );
+                    }).toList(),
+                  ),
+                ),
+
+                // Right: Horizontally Scrollable Tracks Canvas
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (ctx, constraints) {
+                      final viewW = constraints.maxWidth;
+                      return SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        controller: _hScroll,
+                        physics: const BouncingScrollPhysics(),
+                        child: SizedBox(
+                          width: totalW,
+                          child: Stack(
+                            children: [
+                              GestureDetector(
                                 onTapUp: (d) => _onTimelineTap(d, viewW),
                                 onScaleStart: _onScaleStart,
                                 onScaleUpdate: _onScaleUpdate,
@@ -226,14 +266,6 @@ class _MultiTrackTimelineState extends ConsumerState<MultiTrackTimeline> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    // Ruler (Markings: 0s · · 8s · · 16s · ·)
-                                    _TimelineRuler(
-                                      totalW: totalW,
-                                      durationMs: durationMs,
-                                      ppm: ppm,
-                                      onSeek: (ms) => notifier.seekTo(ms),
-                                    ),
-                                    // Track Clip Rows
                                     ...tracks.map((track) {
                                       return _TrackClipRow(
                                         key: ValueKey('clips_${track.id}'),
@@ -249,38 +281,53 @@ class _MultiTrackTimelineState extends ConsumerState<MultiTrackTimeline> {
                                   ],
                                 ),
                               ),
-                            ),
 
-                            // 2.2 Playhead Needle (100% In-Sync, Never Jumps or Drifts)
-                            Positioned(
-                              left: (ed.currentTimeMs * ppm) - 24,
-                              top: 0,
-                              bottom: 0,
-                              width: 48,
-                              child: _InteractivePlayheadNeedle(
-                                currentTimeMs: ed.currentTimeMs,
-                                ppm: ppm,
-                                onSeek: (ms) => notifier.seekTo(ms),
+                              // Playhead Needle Line (White Glowing Needle)
+                              Positioned(
+                                left: (ed.currentTimeMs * ppm) - 1,
+                                top: 0,
+                                bottom: 0,
+                                width: 2,
+                                child: IgnorePointer(
+                                  child: Container(
+                                    decoration: const BoxDecoration(
+                                      color: Colors.white,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Color(0xAAFFFFFF),
+                                          blurRadius: 4,
+                                          spreadRadius: 0.5,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
 
-        // ── 3. Clip Property Panel (Shows when a clip is selected) ─────────
+        // ── 4. Clip Property Panel (Shows when a clip is selected) ─────────
         if (ed.selectedClip != null)
           ClipPropertyPanel(
             clip: ed.selectedClip!,
             onClose: () => notifier.deselectAll(),
             onDelete: () => notifier.deleteSelectedClip(),
             onSplit: () => notifier.splitSelectedClip(),
+            onDuplicate: () => notifier.duplicateClip(ed.selectedClip!.id),
+            onExtractAudio: () => notifier.extractAudioFromClip(ed.selectedClip!.id),
+            onColor: () => notifier.setBottomTool(BottomTool.filters),
+            onSpeed: () => notifier.setBottomTool(BottomTool.speed),
+            onFX: () => notifier.setBottomTool(BottomTool.effects),
+            onTransform: () => notifier.setBottomTool(BottomTool.text),
           ),
       ],
     );
@@ -759,6 +806,37 @@ class _TrackClipRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final isHidden = track.isHidden;
 
+    // Detect adjacent clips for split seam transition buttons [⧖] (CapCut / FilmCraft style)
+    final sortedClips = List<ClipItem>.from(track.clips)..sort((a, b) => a.startMs.compareTo(b.startMs));
+    final seamButtons = <Widget>[];
+
+    if (track.type == TrackType.video || track.type == TrackType.image) {
+      for (int i = 0; i < sortedClips.length - 1; i++) {
+        final leftClip = sortedClips[i];
+        final rightClip = sortedClips[i + 1];
+        if ((rightClip.startMs - leftClip.endMs).abs() < 80) {
+          ClipTransition? applied;
+          for (final tr in editorState.project.transitions) {
+            if (tr.leftClipId == leftClip.id && tr.rightClipId == rightClip.id) {
+              applied = tr;
+              break;
+            }
+          }
+          seamButtons.add(
+            Positioned(
+              left: (rightClip.startMs * ppm) - 11,
+              top: (_height - 22) / 2,
+              child: _TransitionCutButton(
+                leftClip: leftClip,
+                rightClip: rightClip,
+                transition: applied,
+              ),
+            ),
+          );
+        }
+      }
+    }
+
     return Container(
       height: _height,
       width: totalWidth,
@@ -797,6 +875,8 @@ class _TrackClipRow extends StatelessWidget {
                         ),
                       );
                     }),
+                    // Render Transition Cut Buttons above clips
+                    ...seamButtons,
                   ],
                 ),
     );
@@ -1188,4 +1268,316 @@ class _WaveformPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_WaveformPainter old) => old.color != color;
+}
+
+// ─── Playhead Capsule Head (On Top of Ruler) ──────────────────────────────────
+class _PlayheadCapsuleHead extends StatelessWidget {
+  final double currentTimeMs;
+  final double ppm;
+  final void Function(double) onSeek;
+
+  const _PlayheadCapsuleHead({
+    required this.currentTimeMs,
+    required this.ppm,
+    required this.onSeek,
+  });
+
+  String _formatPill(double ms) {
+    final totalSec = ms / 1000.0;
+    final s = totalSec.toInt();
+    final tenths = ((totalSec - s) * 10).toInt();
+    return '$s.${tenths}s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onHorizontalDragStart: (_) => HapticFeedback.selectionClick(),
+      onHorizontalDragUpdate: (details) {
+        final deltaMs = details.primaryDelta! / ppm;
+        onSeek(math.max(0.0, currentTimeMs + deltaMs));
+        HapticFeedback.selectionClick();
+      },
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: const [
+              BoxShadow(
+                color: Colors.black87,
+                blurRadius: 6,
+                offset: Offset(0, 1),
+              ),
+            ],
+          ),
+          child: Text(
+            _formatPill(currentTimeMs),
+            style: const TextStyle(
+              color: Color(0xFF080A0E),
+              fontSize: 9.5,
+              fontWeight: FontWeight.w900,
+              fontFamily: 'monospace',
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Split Cut Transition Seam Button [⧖] (FilmCraft / CapCut Inspired) ───────
+class _TransitionCutButton extends StatelessWidget {
+  final ClipItem leftClip;
+  final ClipItem rightClip;
+  final ClipTransition? transition;
+
+  const _TransitionCutButton({
+    required this.leftClip,
+    required this.rightClip,
+    required this.transition,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasTransition = transition != null && transition!.type != TransitionType.none;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        HapticFeedback.selectionClick();
+        showModalBottomSheet(
+          context: context,
+          backgroundColor: Video365Colors.secondaryBg,
+          isScrollControlled: true,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          builder: (_) => _TransitionsSheet(
+            leftClip: leftClip,
+            rightClip: rightClip,
+            current: transition,
+          ),
+        );
+      },
+      child: Container(
+        width: 22,
+        height: 22,
+        decoration: BoxDecoration(
+          color: hasTransition ? Video365Colors.activeGreen : const Color(0xFF151B28),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: hasTransition ? Colors.white : const Color(0xFF475569),
+            width: 1.2,
+          ),
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.black87,
+              blurRadius: 5,
+              offset: Offset(0, 1),
+            ),
+          ],
+        ),
+        child: Center(
+          child: Icon(
+            hasTransition ? transition!.type.icon : Icons.hourglass_bottom_rounded,
+            size: 12,
+            color: hasTransition ? const Color(0xFF080A0E) : Colors.white70,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Transitions Bottom Sheet ─────────────────────────────────────────────────
+class _TransitionsSheet extends ConsumerStatefulWidget {
+  final ClipItem leftClip;
+  final ClipItem rightClip;
+  final ClipTransition? current;
+
+  const _TransitionsSheet({
+    required this.leftClip,
+    required this.rightClip,
+    required this.current,
+  });
+
+  @override
+  ConsumerState<_TransitionsSheet> createState() => _TransitionsSheetState();
+}
+
+class _TransitionsSheetState extends ConsumerState<_TransitionsSheet> {
+  late TransitionType _selectedType;
+  late double _durationMs;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedType = widget.current?.type ?? TransitionType.crossDissolve;
+    _durationMs = widget.current?.durationMs ?? 500.0;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: const BoxDecoration(
+        color: Video365Colors.secondaryBg,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: const [
+                  Icon(Icons.alt_route_rounded, color: Video365Colors.activeGreen, size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    'Cut Transition',
+                    style: TextStyle(
+                      color: Video365Colors.primaryText,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+              IconButton(
+                icon: const Icon(Icons.close_rounded, color: Video365Colors.secondaryText, size: 20),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ],
+          ),
+          Text(
+            'Between ${widget.leftClip.title} and ${widget.rightClip.title}',
+            style: const TextStyle(color: Video365Colors.secondaryText, fontSize: 11),
+          ),
+          const SizedBox(height: 14),
+
+          // Duration Slider
+          Row(
+            children: [
+              const Text(
+                'Duration:',
+                style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${(_durationMs / 1000).toStringAsFixed(1)}s',
+                style: const TextStyle(
+                  color: Video365Colors.activeGreen,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: 'monospace',
+                ),
+              ),
+              Expanded(
+                child: SliderTheme(
+                  data: SliderThemeData(
+                    activeTrackColor: Video365Colors.activeGreen,
+                    inactiveTrackColor: const Color(0xFF222B3D),
+                    thumbColor: Colors.white,
+                    trackHeight: 3,
+                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                  ),
+                  child: Slider(
+                    value: _durationMs,
+                    min: 200,
+                    max: 2000,
+                    divisions: 18,
+                    onChanged: (val) => setState(() => _durationMs = val),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Transition Presets Grid
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: TransitionType.values.map((type) {
+              final isSelected = _selectedType == type;
+              return GestureDetector(
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  setState(() => _selectedType = type);
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? Video365Colors.activeGreen.withValues(alpha: 0.15)
+                        : const Color(0xFF131722),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isSelected ? Video365Colors.activeGreen : const Color(0xFF222B3D),
+                      width: isSelected ? 1.5 : 1.0,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        type.icon,
+                        size: 15,
+                        color: isSelected ? Video365Colors.activeGreen : Colors.white70,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        type.label,
+                        style: TextStyle(
+                          color: isSelected ? Colors.white : const Color(0xFF94A3B8),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+
+          const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            height: 44,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Video365Colors.activeGreen,
+                foregroundColor: const Color(0xFF080A0E),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+              ),
+              onPressed: () {
+                ref.read(editorProvider.notifier).applyTransition(
+                      widget.leftClip.id,
+                      widget.rightClip.id,
+                      _selectedType,
+                      _durationMs,
+                    );
+                Navigator.of(context).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Applied ${_selectedType.label} transition'),
+                    backgroundColor: Video365Colors.activeGreen,
+                    duration: const Duration(seconds: 1),
+                  ),
+                );
+              },
+              child: const Text('Apply Transition', style: TextStyle(fontWeight: FontWeight.w800)),
+            ),
+          ),
+          const SizedBox(height: 10),
+        ],
+      ),
+    );
+  }
 }

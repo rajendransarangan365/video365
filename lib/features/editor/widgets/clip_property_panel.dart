@@ -9,6 +9,12 @@ class ClipPropertyPanel extends StatelessWidget {
   final VoidCallback onClose;
   final VoidCallback onDelete;
   final VoidCallback onSplit;
+  final VoidCallback onDuplicate;
+  final VoidCallback onColor;
+  final VoidCallback onSpeed;
+  final VoidCallback onFX;
+  final VoidCallback onTransform;
+  final VoidCallback? onExtractAudio;
 
   const ClipPropertyPanel({
     super.key,
@@ -16,6 +22,12 @@ class ClipPropertyPanel extends StatelessWidget {
     required this.onClose,
     required this.onDelete,
     required this.onSplit,
+    required this.onDuplicate,
+    required this.onColor,
+    required this.onSpeed,
+    required this.onFX,
+    required this.onTransform,
+    this.onExtractAudio,
   });
 
   String _formatMs(double ms) {
@@ -99,68 +111,70 @@ class ClipPropertyPanel extends StatelessWidget {
                     icon: Icons.copy_rounded,
                     label: 'Duplicate',
                     color: const Color(0xFF64748B),
-                    onTap: () {},
+                    onTap: onDuplicate,
                   ),
                   const SizedBox(width: 6),
+                  if (clip.type == TrackType.video) ...[
+                    _ActionChip(
+                      icon: Icons.music_note_rounded,
+                      label: 'Extract Audio',
+                      color: const Color(0xFF06B6D4),
+                      onTap: onExtractAudio ?? () {},
+                    ),
+                    const SizedBox(width: 6),
+                  ],
                   if (clip.type == TrackType.video || clip.type == TrackType.image) ...[
                     _ActionChip(
                       icon: Icons.tune_rounded,
                       label: 'Color',
                       color: const Color(0xFFF59E0B),
-                      onTap: () {},
+                      onTap: onColor,
                     ),
                     const SizedBox(width: 6),
                     _ActionChip(
                       icon: Icons.speed_rounded,
                       label: 'Speed',
                       color: const Color(0xFF7C3AED),
-                      onTap: () {},
+                      onTap: onSpeed,
                     ),
                     const SizedBox(width: 6),
                     _ActionChip(
                       icon: Icons.auto_fix_high_rounded,
                       label: 'FX',
                       color: const Color(0xFF0891B2),
-                      onTap: () {},
+                      onTap: onFX,
                     ),
                     const SizedBox(width: 6),
                     _ActionChip(
                       icon: Icons.crop_rotate_rounded,
                       label: 'Transform',
                       color: const Color(0xFF059669),
-                      onTap: () {},
+                      onTap: onTransform,
                     ),
                     const SizedBox(width: 6),
                   ],
                   if (clip.type == TrackType.audio || clip.type == TrackType.voiceover) ...[
                     _ActionChip(
-                      icon: Icons.graphic_eq_rounded,
-                      label: 'Volume',
-                      color: const Color(0xFF4F46E5),
-                      onTap: () {},
+                      icon: Icons.speed_rounded,
+                      label: 'Speed',
+                      color: const Color(0xFF7C3AED),
+                      onTap: onSpeed,
                     ),
                     const SizedBox(width: 6),
                     _ActionChip(
-                      icon: Icons.surround_sound_rounded,
-                      label: 'Pan',
-                      color: const Color(0xFF059669),
-                      onTap: () {},
+                      icon: Icons.graphic_eq_rounded,
+                      label: 'Volume',
+                      color: const Color(0xFF4F46E5),
+                      onTap: onTransform,
                     ),
                     const SizedBox(width: 6),
                   ],
                   if (clip.type == TrackType.text) ...[
                     _ActionChip(
-                      icon: Icons.font_download_outlined,
-                      label: 'Font',
-                      color: const Color(0xFF7C3AED),
-                      onTap: () {},
-                    ),
-                    const SizedBox(width: 6),
-                    _ActionChip(
-                      icon: Icons.animation_rounded,
-                      label: 'Animate',
-                      color: const Color(0xFFF59E0B),
-                      onTap: () {},
+                      icon: Icons.crop_rotate_rounded,
+                      label: 'Transform',
+                      color: const Color(0xFF059669),
+                      onTap: onTransform,
                     ),
                     const SizedBox(width: 6),
                   ],
