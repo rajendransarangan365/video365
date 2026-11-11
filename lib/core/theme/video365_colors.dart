@@ -59,3 +59,4 @@ class Video365Colors {
     end: Alignment.bottomCenter,
   );
 }
+

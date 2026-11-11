@@ -16,7 +16,6 @@ class _MultiTrackTimelineState extends ConsumerState<MultiTrackTimeline> {
   final ScrollController _scrollController = ScrollController();
   bool _isUserScrolling = false;
 
-  // Pixels per second at 1.0x zoom
   static const double basePixelsPerSecond = 80.0;
 
   @override
@@ -42,7 +41,7 @@ class _MultiTrackTimelineState extends ConsumerState<MultiTrackTimeline> {
     final editorState = ref.watch(editorProvider);
     final editorNotifier = ref.read(editorProvider.notifier);
 
-    final durationMs = editorState.project.durationMs;
+    final durationMs = math.max(editorState.project.durationMs, 5000.0);
     final currentTimeMs = editorState.currentTimeMs;
     final zoomScale = editorState.zoomScale;
 
@@ -54,7 +53,6 @@ class _MultiTrackTimelineState extends ConsumerState<MultiTrackTimeline> {
         final viewportWidth = constraints.maxWidth;
         final contentPaddingHorizontal = viewportWidth / 2;
 
-        // Auto-sync playhead if playing
         if (editorState.isPlaying) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             _syncScrollWithPlayhead(currentTimeMs, zoomScale, viewportWidth);
@@ -63,14 +61,14 @@ class _MultiTrackTimelineState extends ConsumerState<MultiTrackTimeline> {
 
         return Container(
           decoration: const BoxDecoration(
-            color: Color(0xFF0D1017),
+            color: Color(0xFF0A0D14),
             border: Border(
               top: BorderSide(color: Video365Colors.cardBorder, width: 1),
             ),
           ),
           child: Stack(
             children: [
-              // Main scrollable timeline content
+              // Scrollable Timeline Content
               NotificationListener<ScrollNotification>(
                 onNotification: (notification) {
                   if (notification is ScrollStartNotification) {
@@ -99,42 +97,56 @@ class _MultiTrackTimelineState extends ConsumerState<MultiTrackTimeline> {
                         // 1. Timecode Ruler with Ticks
                         _buildRuler(totalTimelineWidth, durationMs, zoomScale),
 
-                        const SizedBox(height: 6),
+                        const SizedBox(height: 4),
 
-                        // 2. Video Filmstrip Track (V1)
+                        // 2. FX / Adjustment Layer Track
+                        _buildTrackRow(
+                          trackId: 'track_effect',
+                          trackType: TrackType.effect,
+                          height: 32,
+                          editorState: editorState,
+                          editorNotifier: editorNotifier,
+                          pixelsPerMs: pixelsPerMs,
+                          emptyPlaceholder: 'No active effects',
+                        ),
+
+                        const SizedBox(height: 4),
+
+                        // 3. Text / Motion Graphics Track
+                        _buildTrackRow(
+                          trackId: 'track_text',
+                          trackType: TrackType.text,
+                          height: 34,
+                          editorState: editorState,
+                          editorNotifier: editorNotifier,
+                          pixelsPerMs: pixelsPerMs,
+                          emptyPlaceholder: 'No titles or lower thirds',
+                        ),
+
+                        const SizedBox(height: 4),
+
+                        // 4. Video & Media Track (V1)
                         _buildVideoFilmstripTrack(
                           editorState,
                           editorNotifier,
                           pixelsPerMs,
                         ),
 
-                        const SizedBox(height: 6),
+                        const SizedBox(height: 4),
 
-                        // 3. Text Overlay Track (V2)
-                        _buildTextTrack(
-                          editorState,
-                          editorNotifier,
-                          pixelsPerMs,
-                        ),
-
-                        const SizedBox(height: 6),
-
-                        // 4. Background Audio Track (A1)
+                        // 5. Audio Music Track (A1)
                         _buildAudioTrack(
                           editorState,
                           editorNotifier,
                           pixelsPerMs,
                         ),
 
-                        const SizedBox(height: 6),
+                        const SizedBox(height: 4),
 
-                        // 5. Voiceover Track (A2)
-                        _buildVoiceoverTrack(
-                          editorState,
-                          pixelsPerMs,
-                        ),
+                        // 6. Voiceover Track (A2)
+                        _buildVoiceoverTrack(editorState, pixelsPerMs),
 
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 8),
                       ],
                     ),
                   ),
@@ -149,10 +161,10 @@ class _MultiTrackTimelineState extends ConsumerState<MultiTrackTimeline> {
                 child: _buildPlayheadNeedle(currentTimeMs),
               ),
 
-              // Left floating Track Labels / Mute toggles
+              // Left floating Track Labels
               Positioned(
-                left: 12,
-                top: 36,
+                left: 10,
+                top: 30,
                 child: _buildTrackLabels(),
               ),
             ],
@@ -164,7 +176,7 @@ class _MultiTrackTimelineState extends ConsumerState<MultiTrackTimeline> {
 
   Widget _buildRuler(double width, double durationMs, double zoomScale) {
     return Container(
-      height: 24,
+      height: 22,
       width: width,
       decoration: const BoxDecoration(
         border: Border(
@@ -181,6 +193,81 @@ class _MultiTrackTimelineState extends ConsumerState<MultiTrackTimeline> {
     );
   }
 
+  Widget _buildTrackRow({
+    required String trackId,
+    required TrackType trackType,
+    required double height,
+    required EditorState editorState,
+    required EditorNotifier editorNotifier,
+    required double pixelsPerMs,
+    required String emptyPlaceholder,
+  }) {
+    final track = editorState.project.tracks.firstWhere(
+      (t) => t.id == trackId,
+      orElse: () => TrackItem(id: trackId, type: trackType, name: ''),
+    );
+
+    return Container(
+      height: height,
+      decoration: BoxDecoration(
+        color: const Color(0xFF131722),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: track.clips.isEmpty
+          ? Container(
+              alignment: Alignment.centerLeft,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: Text(
+                emptyPlaceholder,
+                style: const TextStyle(
+                  color: Color(0xFF334155),
+                  fontSize: 10,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            )
+          : Stack(
+              children: track.clips.map((clip) {
+                final clipLeft = clip.startMs * pixelsPerMs;
+                final clipWidth = clip.durationMs * pixelsPerMs;
+                final isSelected = editorState.selectedClipId == clip.id;
+
+                return Positioned(
+                  left: clipLeft,
+                  width: math.max(clipWidth, 40.0),
+                  top: 2,
+                  bottom: 2,
+                  child: GestureDetector(
+                    onTap: () => editorNotifier.selectClip(clip.id, trackId: track.id),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      decoration: BoxDecoration(
+                        color: clip.color.withOpacity(0.85),
+                        borderRadius: BorderRadius.circular(5),
+                        border: Border.all(
+                          color: isSelected ? Colors.white : Colors.transparent,
+                          width: isSelected ? 1.8 : 0,
+                        ),
+                      ),
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        clip.title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+    );
+  }
+
   Widget _buildVideoFilmstripTrack(
     EditorState state,
     EditorNotifier notifier,
@@ -188,224 +275,126 @@ class _MultiTrackTimelineState extends ConsumerState<MultiTrackTimeline> {
   ) {
     final videoTrack = state.project.tracks.firstWhere(
       (t) => t.type == TrackType.video,
-      orElse: () => const TrackItem(id: '', type: TrackType.video, name: ''),
+      orElse: () => const TrackItem(id: 'track_video', type: TrackType.video, name: 'Video'),
     );
 
     return Container(
-      height: 54,
-      decoration: BoxDecoration(
-        color: const Color(0xFF131722),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Stack(
-        children: videoTrack.clips.map((clip) {
-          final clipLeft = clip.startMs * pixelsPerMs;
-          final clipWidth = clip.durationMs * pixelsPerMs;
-          final isSelected = state.selectedClipId == clip.id;
-
-          return Positioned(
-            left: clipLeft,
-            width: clipWidth,
-            top: 0,
-            bottom: 0,
-            child: GestureDetector(
-              onTap: () => notifier.selectClip(clip.id, trackId: videoTrack.id),
-              child: Container(
-                margin: const EdgeInsets.only(right: 2),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E2638),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                    color: isSelected
-                        ? Video365Colors.activeGreen
-                        : const Color(0xFF2A3448),
-                    width: isSelected ? 2.0 : 1.0,
-                  ),
-                  boxShadow: isSelected
-                      ? [
-                          BoxShadow(
-                            color: Video365Colors.activeGreen.withOpacity(0.35),
-                            blurRadius: 8,
-                          ),
-                        ]
-                      : [],
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: Stack(
-                  children: [
-                    // Simulated Filmstrip Frames
-                    Positioned.fill(
-                      child: Row(
-                        children: List.generate(
-                          math.max(1, (clipWidth / 44).floor()),
-                          (index) => Container(
-                            width: 44,
-                            decoration: BoxDecoration(
-                              border: Border(
-                                right: BorderSide(
-                                  color: Colors.black.withOpacity(0.4),
-                                  width: 1,
-                                ),
-                              ),
-                            ),
-                            child: Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                Icon(
-                                  Icons.image_outlined,
-                                  size: 18,
-                                  color: Colors.white.withOpacity(0.25),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    // Clip Title Badge
-                    Positioned(
-                      top: 4,
-                      left: 6,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.7),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          clip.title,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    // Trim Handles if selected
-                    if (isSelected) ...[
-                      // Left Handle
-                      Positioned(
-                        left: 0,
-                        top: 0,
-                        bottom: 0,
-                        width: 10,
-                        child: Container(
-                          decoration: const BoxDecoration(
-                            color: Video365Colors.activeGreen,
-                            borderRadius: BorderRadius.only(
-                              topLeft: Radius.circular(5),
-                              bottomLeft: Radius.circular(5),
-                            ),
-                          ),
-                          alignment: Alignment.center,
-                          child: Container(
-                            width: 2,
-                            height: 16,
-                            color: Colors.black,
-                          ),
-                        ),
-                      ),
-                      // Right Handle
-                      Positioned(
-                        right: 0,
-                        top: 0,
-                        bottom: 0,
-                        width: 10,
-                        child: Container(
-                          decoration: const BoxDecoration(
-                            color: Video365Colors.activeGreen,
-                            borderRadius: BorderRadius.only(
-                              topRight: Radius.circular(5),
-                              bottomRight: Radius.circular(5),
-                            ),
-                          ),
-                          alignment: Alignment.center,
-                          child: Container(
-                            width: 2,
-                            height: 16,
-                            color: Colors.black,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  Widget _buildTextTrack(
-    EditorState state,
-    EditorNotifier notifier,
-    double pixelsPerMs,
-  ) {
-    final textTrack = state.project.tracks.firstWhere(
-      (t) => t.type == TrackType.text,
-      orElse: () => const TrackItem(id: '', type: TrackType.text, name: ''),
-    );
-
-    return Container(
-      height: 34,
+      height: 52,
       decoration: BoxDecoration(
         color: const Color(0xFF131722),
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Stack(
-        children: textTrack.clips.map((clip) {
-          final clipLeft = clip.startMs * pixelsPerMs;
-          final clipWidth = clip.durationMs * pixelsPerMs;
-          final isSelected = state.selectedClipId == clip.id;
-
-          return Positioned(
-            left: clipLeft,
-            width: clipWidth,
-            top: 2,
-            bottom: 2,
-            child: GestureDetector(
-              onTap: () => notifier.selectClip(clip.id, trackId: textTrack.id),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E3A8A).withOpacity(0.85),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                    color: isSelected
-                        ? Video365Colors.activeGreen
-                        : const Color(0xFF3B82F6),
-                    width: isSelected ? 1.8 : 1.0,
-                  ),
-                ),
-                alignment: Alignment.centerLeft,
+      child: videoTrack.clips.isEmpty
+          ? Center(
+              child: GestureDetector(
+                onTap: () => notifier.toggleMediaBrowser(),
                 child: Row(
-                  children: [
-                    const Icon(Icons.title_rounded, size: 14, color: Colors.white70),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        clip.title,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.add_circle_outline_rounded, size: 16, color: Video365Colors.activeGreen),
+                    SizedBox(width: 6),
+                    Text(
+                      'Tap to Add Video, Photo, or GIF',
+                      style: TextStyle(
+                        color: Video365Colors.activeGreen,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ],
                 ),
               ),
+            )
+          : Stack(
+              children: [
+                ...videoTrack.clips.map((clip) {
+                  final clipLeft = clip.startMs * pixelsPerMs;
+                  final clipWidth = clip.durationMs * pixelsPerMs;
+                  final isSelected = state.selectedClipId == clip.id;
+
+                  return Positioned(
+                    left: clipLeft,
+                    width: math.max(clipWidth, 40.0),
+                    top: 0,
+                    bottom: 0,
+                    child: GestureDetector(
+                      onTap: () => notifier.selectClip(clip.id, trackId: videoTrack.id),
+                      child: Container(
+                        margin: const EdgeInsets.only(right: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E2638),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: isSelected ? Video365Colors.activeGreen : const Color(0xFF2A3448),
+                            width: isSelected ? 2.0 : 1.0,
+                          ),
+                          boxShadow: isSelected
+                              ? [
+                                  BoxShadow(
+                                    color: Video365Colors.activeGreen.withOpacity(0.35),
+                                    blurRadius: 8,
+                                  ),
+                                ]
+                              : [],
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: Stack(
+                          children: [
+                            // Frame ticks
+                            Positioned.fill(
+                              child: Row(
+                                children: List.generate(
+                                  math.max(1, (clipWidth / 44).floor()),
+                                  (index) => Container(
+                                    width: 44,
+                                    decoration: BoxDecoration(
+                                      border: Border(
+                                        right: BorderSide(
+                                          color: Colors.black.withOpacity(0.4),
+                                          width: 1,
+                                        ),
+                                      ),
+                                    ),
+                                    child: Center(
+                                      child: Icon(
+                                        Icons.image_outlined,
+                                        size: 16,
+                                        color: Colors.white.withOpacity(0.2),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                            // Clip Title
+                            Positioned(
+                              top: 4,
+                              left: 6,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.75),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  clip.title,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ],
             ),
-          );
-        }).toList(),
-      ),
     );
   }
 
@@ -416,68 +405,70 @@ class _MultiTrackTimelineState extends ConsumerState<MultiTrackTimeline> {
   ) {
     final audioTrack = state.project.tracks.firstWhere(
       (t) => t.type == TrackType.audio,
-      orElse: () => const TrackItem(id: '', type: TrackType.audio, name: ''),
+      orElse: () => const TrackItem(id: 'track_audio', type: TrackType.audio, name: 'Audio'),
     );
 
     return Container(
-      height: 38,
+      height: 36,
       decoration: BoxDecoration(
         color: const Color(0xFF131722),
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Stack(
-        children: audioTrack.clips.map((clip) {
-          final clipLeft = clip.startMs * pixelsPerMs;
-          final clipWidth = clip.durationMs * pixelsPerMs;
-          final isSelected = state.selectedClipId == clip.id;
-
-          return Positioned(
-            left: clipLeft,
-            width: clipWidth,
-            top: 2,
-            bottom: 2,
-            child: GestureDetector(
-              onTap: () => notifier.selectClip(clip.id, trackId: audioTrack.id),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF312E81).withOpacity(0.8),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                    color: isSelected
-                        ? Video365Colors.activeGreen
-                        : const Color(0xFF4F46E5),
-                    width: isSelected ? 1.8 : 1.0,
-                  ),
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: CustomPaint(
-                  painter: AudioWaveformPainter(
-                    color: const Color(0xFF818CF8),
-                    totalBars: math.max(10, (clipWidth / 4).floor()),
-                  ),
-                ),
+      child: audioTrack.clips.isEmpty
+          ? Container(
+              alignment: Alignment.centerLeft,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: const Text(
+                'No audio added',
+                style: TextStyle(color: Color(0xFF334155), fontSize: 10, fontStyle: FontStyle.italic),
               ),
+            )
+          : Stack(
+              children: audioTrack.clips.map((clip) {
+                final clipLeft = clip.startMs * pixelsPerMs;
+                final clipWidth = clip.durationMs * pixelsPerMs;
+                final isSelected = state.selectedClipId == clip.id;
+
+                return Positioned(
+                  left: clipLeft,
+                  width: math.max(clipWidth, 40.0),
+                  top: 2,
+                  bottom: 2,
+                  child: GestureDetector(
+                    onTap: () => notifier.selectClip(clip.id, trackId: audioTrack.id),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF312E81).withOpacity(0.85),
+                        borderRadius: BorderRadius.circular(5),
+                        border: Border.all(
+                          color: isSelected ? Video365Colors.activeGreen : const Color(0xFF4F46E5),
+                          width: isSelected ? 1.8 : 1.0,
+                        ),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: CustomPaint(
+                        painter: AudioWaveformPainter(
+                          color: const Color(0xFF818CF8),
+                          totalBars: math.max(10, (clipWidth / 4).floor()),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
             ),
-          );
-        }).toList(),
-      ),
     );
   }
 
   Widget _buildVoiceoverTrack(EditorState state, double pixelsPerMs) {
     return Container(
-      height: 34,
+      height: 30,
       decoration: BoxDecoration(
         color: const Color(0xFF131722),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-          color: const Color(0xFF222938),
-          style: BorderStyle.solid,
-          width: 1,
-        ),
       ),
       alignment: Alignment.centerLeft,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 14),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: const [
@@ -487,7 +478,7 @@ class _MultiTrackTimelineState extends ConsumerState<MultiTrackTimeline> {
             'Tap to record voiceover',
             style: TextStyle(
               color: Video365Colors.secondaryText,
-              fontSize: 11,
+              fontSize: 10,
               fontStyle: FontStyle.italic,
             ),
           ),
@@ -508,7 +499,6 @@ class _MultiTrackTimelineState extends ConsumerState<MultiTrackTimeline> {
         alignment: Alignment.topCenter,
         clipBehavior: Clip.none,
         children: [
-          // Needle Line
           Positioned(
             top: 20,
             bottom: 0,
@@ -525,8 +515,6 @@ class _MultiTrackTimelineState extends ConsumerState<MultiTrackTimeline> {
               ),
             ),
           ),
-
-          // Top Pill Tag Indicator
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
@@ -566,10 +554,12 @@ class _MultiTrackTimelineState extends ConsumerState<MultiTrackTimeline> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: const [
-          _TrackLabelPill(icon: Icons.video_collection_outlined, label: 'Video'),
+          _TrackLabelPill(icon: Icons.auto_fix_high_rounded, label: 'FX'),
           SizedBox(height: 18),
           _TrackLabelPill(icon: Icons.title_rounded, label: 'Text'),
-          SizedBox(height: 16),
+          SizedBox(height: 18),
+          _TrackLabelPill(icon: Icons.video_collection_outlined, label: 'Video'),
+          SizedBox(height: 24),
           _TrackLabelPill(icon: Icons.music_note_rounded, label: 'Music'),
           SizedBox(height: 16),
           _TrackLabelPill(icon: Icons.mic_rounded, label: 'Voice'),
@@ -636,11 +626,8 @@ class TimelineRulerPainter extends CustomPainter {
     final totalSeconds = (durationMs / 1000.0).ceil();
     final pixelsPerSecond = basePixelsPerSecond * zoomScale;
 
-    // Draw second ticks
     for (int s = 0; s <= totalSeconds; s++) {
       final x = s * pixelsPerSecond;
-
-      // Major tick every 4 seconds or 2 seconds based on zoom
       final isMajor = s % 4 == 0;
 
       if (isMajor) {
@@ -662,7 +649,7 @@ class TimelineRulerPainter extends CustomPainter {
 
         textPainter.paint(
           canvas,
-          Offset(x - (textPainter.width / 2), size.height - 22),
+          Offset(x - (textPainter.width / 2), size.height - 20),
         );
       } else {
         canvas.drawLine(
@@ -697,7 +684,6 @@ class AudioWaveformPainter extends CustomPainter {
     final centerY = size.height / 2;
     final step = size.width / totalBars;
 
-    // Deterministic procedural waveform pattern
     for (int i = 0; i < totalBars; i++) {
       final x = i * step + (step / 2);
       final heightRatio = (math.sin(i * 0.4) * 0.4 + math.cos(i * 0.9) * 0.35).abs() + 0.15;

@@ -1,10 +1,11 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
 import '../../../core/theme/video365_colors.dart';
-import '../../../core/widgets/video365_icons.dart';
 import '../../../models/project_model.dart';
 import '../../../providers/editor_provider.dart';
+import '../../../services/media_service.dart';
 
 class VideoPreviewCard extends ConsumerStatefulWidget {
   const VideoPreviewCard({super.key});
@@ -15,28 +16,8 @@ class VideoPreviewCard extends ConsumerStatefulWidget {
 
 class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
   VideoPlayerController? _controller;
+  String? _currentLoadedSource;
   bool _isInitialized = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _initializePlayer();
-  }
-
-  Future<void> _initializePlayer() async {
-    try {
-      _controller = VideoPlayerController.asset('assets/samples/sample_video365.mp4');
-      await _controller!.initialize();
-      _controller!.setLooping(true);
-      if (mounted) {
-        setState(() {
-          _isInitialized = true;
-        });
-      }
-    } catch (e) {
-      debugPrint('Video initialization note: $e');
-    }
-  }
 
   @override
   void dispose() {
@@ -44,12 +25,120 @@ class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
     super.dispose();
   }
 
+  Future<void> _updatePlayerSource(ClipItem? clip) async {
+    if (clip == null) {
+      if (_controller != null) {
+        await _controller!.dispose();
+        _controller = null;
+        _currentLoadedSource = null;
+        if (mounted) setState(() => _isInitialized = false);
+      }
+      return;
+    }
+
+    final targetSource = clip.filePath ?? clip.assetPath ?? '';
+    if (targetSource.isEmpty || targetSource == _currentLoadedSource) return;
+
+    try {
+      await _controller?.dispose();
+      _controller = null;
+
+      if (clip.filePath != null) {
+        _controller = VideoPlayerController.file(File(clip.filePath!));
+      } else if (clip.assetPath != null) {
+        _controller = VideoPlayerController.asset(clip.assetPath!);
+      }
+
+      if (_controller != null) {
+        await _controller!.initialize();
+        _controller!.setLooping(true);
+        _currentLoadedSource = targetSource;
+        if (mounted) setState(() => _isInitialized = true);
+      }
+    } catch (e) {
+      debugPrint('VideoPreviewCard controller error: $e');
+    }
+  }
+
+  ColorFilter? _getColorFilter(String? preset, double intensity) {
+    if (preset == null || preset == 'none') return null;
+
+    switch (preset) {
+      case 'teal_orange':
+        return const ColorFilter.matrix([
+          1.15, 0.00, 0.00, 0.0, 10,
+          0.00, 0.95, 0.00, 0.0, 5,
+          0.00, 0.00, 1.25, 0.0, 15,
+          0.00, 0.00, 0.00, 1.0, 0,
+        ]);
+      case 'moody_dark':
+        return const ColorFilter.matrix([
+          0.90, 0.00, 0.00, 0.0, -10,
+          0.00, 0.90, 0.00, 0.0, -10,
+          0.00, 0.00, 0.95, 0.0, -5,
+          0.00, 0.00, 0.00, 1.0, 0,
+        ]);
+      case 'cyberpunk':
+        return const ColorFilter.matrix([
+          1.25, 0.00, 0.20, 0.0, 10,
+          0.00, 0.80, 0.00, 0.0, -5,
+          0.10, 0.00, 1.35, 0.0, 15,
+          0.00, 0.00, 0.00, 1.0, 0,
+        ]);
+      case 'golden_hour':
+        return const ColorFilter.matrix([
+          1.20, 0.00, 0.00, 0.0, 15,
+          0.05, 1.10, 0.00, 0.0, 10,
+          0.00, 0.00, 0.80, 0.0, -10,
+          0.00, 0.00, 0.00, 1.0, 0,
+        ]);
+      case 'noir':
+        return const ColorFilter.matrix([
+          0.33, 0.33, 0.33, 0.0, 0,
+          0.33, 0.33, 0.33, 0.0, 0,
+          0.33, 0.33, 0.33, 0.0, 0,
+          0.00, 0.00, 0.00, 1.0, 0,
+        ]);
+      case 'vintage':
+        return const ColorFilter.matrix([
+          0.90, 0.10, 0.05, 0.0, 10,
+          0.05, 0.90, 0.05, 0.0, 5,
+          0.05, 0.05, 0.75, 0.0, -10,
+          0.00, 0.00, 0.00, 1.0, 0,
+        ]);
+      default:
+        return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final editorState = ref.watch(editorProvider);
     final editorNotifier = ref.read(editorProvider.notifier);
+    final currentAspect = editorState.project.aspectRatio;
+    final currentTime = editorState.currentTimeMs;
 
-    // Sync video player with editor play/pause state
+    // Find active video clip
+    final videoTrack = editorState.project.tracks.firstWhere(
+      (t) => t.type == TrackType.video,
+      orElse: () => const TrackItem(id: '', type: TrackType.video, name: ''),
+    );
+
+    final activeVideoClip = videoTrack.clips.firstWhere(
+      (c) => currentTime >= c.startMs && currentTime <= c.endMs,
+      orElse: () => videoTrack.clips.isNotEmpty
+          ? videoTrack.clips.first
+          : const ClipItem(id: '', trackId: '', type: TrackType.video, title: '', startMs: 0, durationMs: 0),
+    );
+
+    // Sync player source if clip exists
+    if (activeVideoClip.id.isNotEmpty) {
+      _updatePlayerSource(activeVideoClip);
+    } else {
+      _updatePlayerSource(null);
+    }
+
+    // Sync playback state
     if (_isInitialized && _controller != null) {
       if (editorState.isPlaying && !_controller!.value.isPlaying) {
         _controller!.play();
@@ -58,30 +147,20 @@ class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
       }
     }
 
-    final currentAspect = editorState.project.aspectRatio;
-    final currentTime = editorState.currentTimeMs;
-
-    // Find active subtitle
-    final activeSubtitle = editorState.project.subtitles.firstWhere(
-      (s) => currentTime >= s.startMs && currentTime <= s.endMs,
-      orElse: () => const SubtitleItem(id: '', startMs: 0, endMs: 0, text: ''),
-    );
-
-    // Find active text overlay clip
+    // Find active motion graphics / text clip
     final textTrack = editorState.project.tracks.firstWhere(
       (t) => t.type == TrackType.text,
       orElse: () => const TrackItem(id: '', type: TrackType.text, name: ''),
     );
     final activeTextClip = textTrack.clips.firstWhere(
       (c) => currentTime >= c.startMs && currentTime <= c.endMs,
-      orElse: () => const ClipItem(
-        id: '',
-        trackId: '',
-        type: TrackType.text,
-        title: '',
-        startMs: 0,
-        durationMs: 0,
-      ),
+      orElse: () => const ClipItem(id: '', trackId: '', type: TrackType.text, title: '', startMs: 0, durationMs: 0),
+    );
+
+    // Active color filter
+    final filter = _getColorFilter(
+      editorState.activeFilterPreset,
+      editorState.activeFilterIntensity,
     );
 
     return Expanded(
@@ -89,16 +168,16 @@ class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
         child: AspectRatio(
           aspectRatio: currentAspect.ratio,
           child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             decoration: BoxDecoration(
-              color: const Color(0xFF11151D),
+              color: const Color(0xFF0C0E14),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: Video365Colors.cardBorder, width: 1.5),
               boxShadow: const [
                 BoxShadow(
-                  color: Colors.black54,
-                  blurRadius: 18,
-                  offset: Offset(0, 6),
+                  color: Colors.black87,
+                  blurRadius: 16,
+                  offset: Offset(0, 4),
                 ),
               ],
             ),
@@ -106,118 +185,29 @@ class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                // 1. Video or Stylized Placeholder
-                GestureDetector(
-                  onTap: () => editorNotifier.togglePlay(),
-                  behavior: HitTestBehavior.opaque,
-                  child: _isInitialized && _controller != null
-                      ? FittedBox(
-                          fit: BoxFit.cover,
-                          child: SizedBox(
-                            width: _controller!.value.size.width,
-                            height: _controller!.value.size.height,
-                            child: VideoPlayer(_controller!),
-                          ),
-                        )
-                      : Container(
-                          decoration: const BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [Color(0xFF1E293B), Color(0xFF0F172A), Color(0xFF020617)],
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                            ),
-                          ),
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              // Atmospheric forest river aesthetic from screenshot
-                              Positioned.fill(
-                                child: CustomPaint(
-                                  painter: LisbonLandscapePainter(),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                ),
+                // 1. Content: Empty Canvas OR Active Video Player
+                if (editorState.project.isEmpty || activeVideoClip.id.isEmpty) ...[
+                  // CLEAN EMPTY STATE (No fake videos!)
+                  _buildEmptyProjectCanvas(context, editorNotifier),
+                ] else ...[
+                  // ACTIVE VIDEO VIEWPORT
+                  GestureDetector(
+                    onTap: () => editorNotifier.togglePlay(),
+                    behavior: HitTestBehavior.opaque,
+                    child: filter != null
+                        ? ColorFiltered(
+                            colorFilter: filter,
+                            child: _buildVideoSurface(activeVideoClip),
+                          )
+                        : _buildVideoSurface(activeVideoClip),
+                  ),
+                ],
 
-                // 2. Text Overlay Layer ("Sunday in Lisbon")
+                // 2. Motion Graphics & Lower Thirds Overlay (After Effects / JSX style)
                 if (activeTextClip.id.isNotEmpty && activeTextClip.textContent != null)
-                  Positioned(
-                    top: 80,
-                    left: 20,
-                    right: 20,
-                    child: Text(
-                      activeTextClip.textContent!,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 26,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.5,
-                        shadows: [
-                          Shadow(
-                            color: Colors.black87,
-                            blurRadius: 16,
-                            offset: Offset(0, 4),
-                          ),
-                          Shadow(
-                            color: Colors.black45,
-                            blurRadius: 4,
-                            offset: Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+                  _buildMotionGraphicsOverlay(activeTextClip),
 
-                // 3. Subtitle / Karaoke Highlighting Overlay
-                if (activeSubtitle.id.isNotEmpty)
-                  Positioned(
-                    bottom: 70,
-                    left: 24,
-                    right: 24,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.55),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Wrap(
-                        alignment: WrapAlignment.center,
-                        spacing: 6,
-                        runSpacing: 4,
-                        children: activeSubtitle.words.map((w) {
-                          final isWordActive =
-                              currentTime >= w.startMs && currentTime <= w.endMs;
-                          return Container(
-                            padding: isWordActive
-                                ? const EdgeInsets.symmetric(horizontal: 8, vertical: 3)
-                                : const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: isWordActive
-                                  ? editorState.captionHighlightColor
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              w.word,
-                              style: TextStyle(
-                                color: isWordActive
-                                    ? Colors.black
-                                    : Video365Colors.primaryText,
-                                fontSize: 16,
-                                fontWeight:
-                                    isWordActive ? FontWeight.w800 : FontWeight.w500,
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                  ),
-
-                // 4. Bottom-Left Aspect Ratio Pill [ 📱 9:16 ]
+                // 3. Bottom-Left Aspect Ratio Badge (NO EMOJIS!)
                 Positioned(
                   left: 12,
                   bottom: 12,
@@ -226,17 +216,17 @@ class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.7),
-                        borderRadius: BorderRadius.circular(20),
+                        color: Colors.black.withOpacity(0.75),
+                        borderRadius: BorderRadius.circular(16),
                         border: Border.all(color: Colors.white24, width: 0.8),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Video365Icon(
-                            Video365IconType.aspectRatio,
-                            size: 12,
-                            color: Colors.white70,
+                          const Icon(
+                            Icons.crop_portrait_rounded,
+                            size: 13,
+                            color: Video365Colors.activeGreen,
                           ),
                           const SizedBox(width: 5),
                           Text(
@@ -244,7 +234,7 @@ class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 11,
-                              fontWeight: FontWeight.w600,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
                         ],
@@ -253,7 +243,7 @@ class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
                   ),
                 ),
 
-                // 5. Bottom-Right Fullscreen [ ⤢ ]
+                // 4. Bottom-Right Fullscreen (NO EMOJIS!)
                 Positioned(
                   right: 12,
                   bottom: 12,
@@ -263,15 +253,15 @@ class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
                       width: 28,
                       height: 28,
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.7),
+                        color: Colors.black.withOpacity(0.75),
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(color: Colors.white24, width: 0.8),
                       ),
                       alignment: Alignment.center,
-                      child: const Video365Icon(
-                        Video365IconType.fullscreen,
-                        size: 13,
-                        color: Colors.white70,
+                      child: const Icon(
+                        Icons.fullscreen_rounded,
+                        size: 16,
+                        color: Colors.white,
                       ),
                     ),
                   ),
@@ -283,69 +273,255 @@ class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
       ),
     );
   }
-}
 
-/// Fallback scenic landscape painter evoking "Sunday in Lisbon" nature scene
-class LisbonLandscapePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final skyPaint = Paint()
-      ..shader = const LinearGradient(
-        colors: [Color(0xFF334155), Color(0xFF1E293B), Color(0xFF0F172A)],
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+  Widget _buildVideoSurface(ClipItem clip) {
+    if (_isInitialized && _controller != null) {
+      return FittedBox(
+        fit: BoxFit.cover,
+        child: SizedBox(
+          width: _controller!.value.size.width,
+          height: _controller!.value.size.height,
+          child: VideoPlayer(_controller!),
+        ),
+      );
+    }
 
-    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), skyPaint);
+    if (clip.filePath != null &&
+        (clip.filePath!.endsWith('.jpg') ||
+            clip.filePath!.endsWith('.png') ||
+            clip.filePath!.endsWith('.gif'))) {
+      return Image.file(
+        File(clip.filePath!),
+        fit: BoxFit.cover,
+      );
+    }
 
-    // Misty mountain ridges
-    final ridgePaint1 = Paint()..color = const Color(0xFF1E2638).withOpacity(0.8);
-    final path1 = Path()
-      ..moveTo(0, size.height * 0.4)
-      ..quadraticBezierTo(size.width * 0.35, size.height * 0.3, size.width * 0.6, size.height * 0.45)
-      ..quadraticBezierTo(size.width * 0.85, size.height * 0.35, size.width, size.height * 0.5)
-      ..lineTo(size.width, size.height)
-      ..lineTo(0, size.height)
-      ..close();
-    canvas.drawPath(path1, ridgePaint1);
-
-    // Forest tree silhouettes on both sides
-    final forestPaint = Paint()..color = const Color(0xFF0F1C1B);
-    final leftTrees = Path()
-      ..moveTo(0, size.height * 0.35)
-      ..lineTo(size.width * 0.4, size.height * 0.6)
-      ..lineTo(size.width * 0.3, size.height * 0.8)
-      ..lineTo(0, size.height)
-      ..close();
-    canvas.drawPath(leftTrees, forestPaint);
-
-    final rightTrees = Path()
-      ..moveTo(size.width, size.height * 0.35)
-      ..lineTo(size.width * 0.6, size.height * 0.6)
-      ..lineTo(size.width * 0.7, size.height * 0.8)
-      ..lineTo(size.width, size.height)
-      ..close();
-    canvas.drawPath(rightTrees, forestPaint);
-
-    // River in the center winding through the valley
-    final riverPaint = Paint()
-      ..shader = const LinearGradient(
-        colors: [Color(0xFF64748B), Color(0xFF94A3B8), Color(0xFFE2E8F0)],
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-      ).createShader(Rect.fromLTWH(0, size.height * 0.5, size.width, size.height * 0.5));
-
-    final river = Path()
-      ..moveTo(size.width * 0.48, size.height * 0.5)
-      ..quadraticBezierTo(size.width * 0.52, size.height * 0.65, size.width * 0.45, size.height * 0.8)
-      ..quadraticBezierTo(size.width * 0.4, size.height * 0.9, size.width * 0.5, size.height)
-      ..lineTo(size.width * 0.58, size.height)
-      ..quadraticBezierTo(size.width * 0.5, size.height * 0.9, size.width * 0.55, size.height * 0.8)
-      ..quadraticBezierTo(size.width * 0.6, size.height * 0.65, size.width * 0.52, size.height * 0.5)
-      ..close();
-    canvas.drawPath(river, riverPaint);
+    return Container(
+      color: const Color(0xFF131722),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.movie_creation_outlined, size: 36, color: Video365Colors.activeGreen),
+            const SizedBox(height: 6),
+            Text(
+              clip.title,
+              style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  Widget _buildEmptyProjectCanvas(BuildContext context, EditorNotifier notifier) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF0E121A),
+        border: Border.all(
+          color: const Color(0xFF232A38),
+          width: 1.5,
+        ),
+      ),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Video365Colors.activeGreen.withOpacity(0.12),
+                  border: Border.all(color: Video365Colors.activeGreen.withOpacity(0.4), width: 1.5),
+                ),
+                alignment: Alignment.center,
+                child: const Icon(
+                  Icons.video_call_outlined,
+                  size: 32,
+                  color: Video365Colors.activeGreen,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Start Your Project',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.3,
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Import a video, photo, or GIF from your mobile device to begin editing.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Video365Colors.secondaryText,
+                  fontSize: 12,
+                  height: 1.35,
+                ),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Video365Colors.activeGreen,
+                  foregroundColor: const Color(0xFF080A0E),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                ),
+                icon: const Icon(Icons.add_photo_alternate_outlined, size: 18),
+                label: const Text(
+                  'Import Media',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                ),
+                onPressed: () => notifier.toggleMediaBrowser(),
+              ),
+              const SizedBox(height: 10),
+              TextButton(
+                onPressed: () {
+                  final stock = MediaService.getBundledStockMedia().first;
+                  notifier.addMediaClip(stock);
+                },
+                child: const Text(
+                  'Or load sample 4K video',
+                  style: TextStyle(color: Video365Colors.secondaryText, fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMotionGraphicsOverlay(ClipItem clip) {
+    final type = clip.motionGraphicsType ?? 'lower_third_minimal';
+
+    if (type == 'cyber_tag') {
+      return Positioned(
+        bottom: 60,
+        left: 20,
+        right: 20,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.8),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: clip.color, width: 2),
+            boxShadow: [
+              BoxShadow(color: clip.color.withOpacity(0.4), blurRadius: 12),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                clip.textContent ?? '',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: clip.fontSize,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              if (clip.subtitleContent != null && clip.subtitleContent!.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text(
+                  clip.subtitleContent!,
+                  style: TextStyle(
+                    color: clip.color,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (type == 'kinetic_punch') {
+      return Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: clip.color,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text(
+            (clip.textContent ?? '').toUpperCase(),
+            style: const TextStyle(
+              color: Colors.black,
+              fontSize: 28,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.0,
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Default: lower_third_minimal (clean accent vertical bar)
+    return Positioned(
+      bottom: 55,
+      left: 20,
+      right: 20,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.65),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 4,
+              height: 38,
+              decoration: BoxDecoration(
+                color: clip.color,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    clip.textContent ?? '',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: clip.fontSize * 0.75,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                  if (clip.subtitleContent != null && clip.subtitleContent!.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      clip.subtitleContent!,
+                      style: const TextStyle(
+                        color: Video365Colors.secondaryText,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

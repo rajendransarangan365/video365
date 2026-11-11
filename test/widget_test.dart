@@ -12,6 +12,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Video365'), findsWidgets);
-    expect(find.text('Recent Projects'), findsOneWidget);
+    expect(find.textContaining('Recent Projects'), findsOneWidget);
   });
 }

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/video365_colors.dart';
-import '../../../core/widgets/video365_icons.dart';
 import '../../../models/project_model.dart';
 import '../../../providers/editor_provider.dart';
 
@@ -15,7 +14,7 @@ class BottomToolBar extends ConsumerWidget {
 
     return Container(
       height: 68,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
       decoration: const BoxDecoration(
         color: Video365Colors.secondaryBg,
         border: Border(
@@ -25,47 +24,52 @@ class BottomToolBar extends ConsumerWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
+          // 0. Add Media
+          _buildToolItem(
+            label: 'Media',
+            isActive: editorState.isMediaBrowserOpen,
+            onTap: () => editorNotifier.toggleMediaBrowser(),
+            icon: Icons.add_circle_outline_rounded,
+          ),
+
           // 1. Trim
           _buildToolItem(
             label: 'Trim',
             isActive: editorState.activeTool == BottomTool.trim,
-            onTap: () {
-              editorNotifier.setBottomTool(BottomTool.trim);
-              editorNotifier.splitSelectedClip();
-            },
-            iconType: Video365IconType.trim,
+            onTap: () => editorNotifier.setBottomTool(BottomTool.trim),
+            icon: Icons.content_cut_rounded,
           ),
 
-          // 2. Text
+          // 2. Text / Lower Thirds
           _buildToolItem(
             label: 'Text',
             isActive: editorState.activeTool == BottomTool.text,
             onTap: () => editorNotifier.setBottomTool(BottomTool.text),
-            iconType: Video365IconType.text,
+            icon: Icons.title_rounded,
           ),
 
           // 3. Audio
           _buildToolItem(
             label: 'Audio',
             isActive: editorState.activeTool == BottomTool.audio,
-            onTap: () => editorNotifier.setBottomTool(BottomTool.audio),
-            iconType: Video365IconType.audio,
+            onTap: () => editorNotifier.toggleMediaBrowser(),
+            icon: Icons.music_note_rounded,
           ),
 
-          // 4. Filters
+          // 4. Filters & LUTs
           _buildToolItem(
             label: 'Filters',
             isActive: editorState.activeTool == BottomTool.filters,
             onTap: () => editorNotifier.setBottomTool(BottomTool.filters),
-            iconType: Video365IconType.filter,
+            icon: Icons.tune_rounded,
           ),
 
-          // 5. Effects
+          // 5. Effects / FX
           _buildToolItem(
             label: 'Effects',
             isActive: editorState.activeTool == BottomTool.effects,
             onTap: () => editorNotifier.setBottomTool(BottomTool.effects),
-            iconType: Video365IconType.effects,
+            icon: Icons.bolt_rounded,
           ),
 
           // 6. Speed
@@ -73,7 +77,7 @@ class BottomToolBar extends ConsumerWidget {
             label: 'Speed',
             isActive: editorState.activeTool == BottomTool.speed,
             onTap: () => editorNotifier.setBottomTool(BottomTool.speed),
-            iconType: Video365IconType.speed,
+            icon: Icons.timer_outlined,
           ),
 
           // 7. Auto Captions
@@ -81,15 +85,15 @@ class BottomToolBar extends ConsumerWidget {
             label: 'Captions',
             isActive: editorState.isCaptionsSheetOpen,
             onTap: () => editorNotifier.toggleCaptionsSheet(),
-            iconFallback: Icons.subtitles_rounded,
+            icon: Icons.subtitles_rounded,
           ),
 
-          // 8. Radial Dial / Wheel Toggle
+          // 8. Radial Dial / Wheel
           _buildToolItem(
             label: 'Wheel',
             isActive: editorState.isRadialMenuOpen,
             onTap: () => editorNotifier.toggleRadialMenu(),
-            iconType: Video365IconType.radialMenu,
+            icon: Icons.album_outlined,
           ),
         ],
       ),
@@ -100,8 +104,7 @@ class BottomToolBar extends ConsumerWidget {
     required String label,
     required bool isActive,
     required VoidCallback onTap,
-    Video365IconType? iconType,
-    IconData? iconFallback,
+    required IconData icon,
   }) {
     final activeColor = isActive ? Video365Colors.activeGreen : Video365Colors.secondaryText;
 
@@ -124,17 +127,11 @@ class BottomToolBar extends ConsumerWidget {
                       borderRadius: BorderRadius.circular(8),
                     )
                   : null,
-              child: iconType != null
-                  ? Video365Icon(
-                      iconType,
-                      size: 20,
-                      color: activeColor,
-                    )
-                  : Icon(
-                      iconFallback ?? Icons.widgets_rounded,
-                      size: 20,
-                      color: activeColor,
-                    ),
+              child: Icon(
+                icon,
+                size: 20,
+                color: activeColor,
+              ),
             ),
             const SizedBox(height: 3),
             Text(
@@ -143,7 +140,7 @@ class BottomToolBar extends ConsumerWidget {
                 color: activeColor,
                 fontSize: 10,
                 fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                letterSpacing: 0.2,
+                letterSpacing: 0.1,
               ),
             ),
           ],

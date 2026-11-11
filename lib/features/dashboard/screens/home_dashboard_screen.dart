@@ -15,10 +15,7 @@ class HomeDashboardScreen extends ConsumerStatefulWidget {
 class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
   int _selectedTab = 0; // 0 = Studio, 1 = Quick Edit
 
-  void _openEditor(BuildContext context, {Video365Project? project}) {
-    if (project != null) {
-      ref.read(editorProvider.notifier).loadProject(project);
-    }
+  void _openEditor(BuildContext context) {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => const EditorScreen(),
@@ -27,7 +24,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
   }
 
   void _showNewProjectDialog(BuildContext context) {
-    String projectName = 'Untitled Project ${DateTime.now().millisecond}';
+    String projectName = 'Untitled Project';
     AspectRatioType selectedAspect = AspectRatioType.ratio9_16;
     ResolutionType selectedResolution = ResolutionType.res1080p;
     FrameRateType selectedFps = FrameRateType.fps30;
@@ -72,7 +69,6 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Project Name TextField
                   TextField(
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
@@ -103,7 +99,6 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                   ),
                   const SizedBox(height: 10),
 
-                  // Aspect Ratio Selector Chips
                   Wrap(
                     spacing: 8,
                     children: AspectRatioType.values.map((aspect) {
@@ -128,7 +123,6 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
 
                   const SizedBox(height: 24),
 
-                  // Create Project CTA
                   SizedBox(
                     width: double.infinity,
                     height: 48,
@@ -143,19 +137,16 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                       ),
                       onPressed: () {
                         Navigator.of(context).pop();
-                        final newProject = Video365Project(
-                          id: 'proj_${DateTime.now().millisecondsSinceEpoch}',
-                          name: projectName.trim().isEmpty ? 'New Project' : projectName.trim(),
-                          createdAt: DateTime.now(),
-                          modifiedAt: DateTime.now(),
-                          aspectRatio: selectedAspect,
-                          resolution: selectedResolution,
-                          fps: selectedFps,
-                        );
-                        _openEditor(context, project: newProject);
+                        ref.read(editorProvider.notifier).startNewProject(
+                              projectName.trim().isEmpty ? 'Untitled Project' : projectName.trim(),
+                              aspect: selectedAspect,
+                              res: selectedResolution,
+                              fps: selectedFps,
+                            );
+                        _openEditor(context);
                       },
                       child: const Text(
-                        'Create & Open Studio',
+                        'Create Empty Project',
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w800,
@@ -175,8 +166,6 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final editorState = ref.watch(editorProvider);
-
     return Scaffold(
       backgroundColor: Video365Colors.mainBg,
       body: SafeArea(
@@ -187,7 +176,6 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
               child: Row(
                 children: [
-                  // Video365 Logo Icon
                   Container(
                     width: 36,
                     height: 36,
@@ -380,7 +368,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: const [
                   Text(
-                    'Recent Projects',
+                    'Recent Projects & Demo',
                     style: TextStyle(
                       color: Video365Colors.primaryText,
                       fontSize: 15,
@@ -406,15 +394,20 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
               child: ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 children: [
-                  // Preloaded Master Project matching screenshot
+                  // Preloaded Master Demo Project
                   _ProjectCard(
-                    title: editorState.project.name,
-                    aspect: editorState.project.aspectRatio.label,
+                    title: 'Sunday in Lisbon (Demo)',
+                    aspect: '9:16',
                     duration: '0:14',
                     resolution: '1080p · 30fps',
-                    modified: 'Just now',
+                    modified: 'Sample Project',
                     badgeColor: Video365Colors.activeGreen,
-                    onTap: () => _openEditor(context),
+                    onTap: () {
+                      ref.read(editorProvider.notifier).loadProject(
+                            EditorNotifier.createDemoProject(),
+                          );
+                      _openEditor(context);
+                    },
                   ),
 
                   _ProjectCard(
@@ -425,31 +418,13 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                     modified: '2 hours ago',
                     badgeColor: Video365Colors.blueAccent,
                     onTap: () {
-                      final p = editorState.project.copyWith(
-                        id: 'proj_summer_4k',
-                        name: 'Summer Vibes 4K',
-                        aspectRatio: AspectRatioType.ratio16_9,
-                        resolution: ResolutionType.res4K,
-                        fps: FrameRateType.fps60,
-                      );
-                      _openEditor(context, project: p);
-                    },
-                  ),
-
-                  _ProjectCard(
-                    title: 'Tokyo Street Motion',
-                    aspect: '9:16',
-                    duration: '0:19',
-                    resolution: '1080p · 60fps',
-                    modified: 'Yesterday',
-                    badgeColor: Video365Colors.purpleAccent,
-                    onTap: () {
-                      final p = editorState.project.copyWith(
-                        id: 'proj_tokyo',
-                        name: 'Tokyo Street Motion',
-                        aspectRatio: AspectRatioType.ratio9_16,
-                      );
-                      _openEditor(context, project: p);
+                      ref.read(editorProvider.notifier).startNewProject(
+                            'Summer Vibes 4K',
+                            aspect: AspectRatioType.ratio16_9,
+                            res: ResolutionType.res4K,
+                            fps: FrameRateType.fps60,
+                          );
+                      _openEditor(context);
                     },
                   ),
 
@@ -577,7 +552,6 @@ class _ProjectCard extends StatelessWidget {
             padding: const EdgeInsets.all(12),
             child: Row(
               children: [
-                // Project Thumbnail
                 Container(
                   width: 56,
                   height: 56,
@@ -616,7 +590,6 @@ class _ProjectCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 14),
 
-                // Project Info
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,

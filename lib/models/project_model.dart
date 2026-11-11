@@ -50,6 +50,7 @@ enum TrackType {
   text('Text', Icons.title_rounded),
   audio('Audio', Icons.music_note_rounded),
   voiceover('Voiceover', Icons.mic_rounded),
+  effect('Effect', Icons.auto_fix_high_rounded),
   adjustment('Adjustment', Icons.tune_rounded);
 
   final String label;
@@ -59,6 +60,7 @@ enum TrackType {
 }
 
 enum BottomTool {
+  none('None'),
   trim('Trim'),
   text('Text'),
   audio('Audio'),
@@ -66,6 +68,7 @@ enum BottomTool {
   effects('Effects'),
   speed('Speed'),
   captions('Captions'),
+  media('Add Media'),
   radial('Wheel');
 
   final String label;
@@ -142,6 +145,8 @@ class ClipItem {
   final double sourceInMs;
   final double sourceOutMs;
   final String? assetPath;
+  final String? filePath;
+  final bool isAsset;
   final Color color;
   final double opacity;
   final double scale;
@@ -150,9 +155,15 @@ class ClipItem {
   final double speed;
   final double volume;
   final String? textContent;
+  final String? subtitleContent;
   final String? fontFamily;
   final double fontSize;
   final Color textColor;
+  final String? filterPreset;
+  final double filterIntensity;
+  final String? effectType;
+  final double effectIntensity;
+  final String? motionGraphicsType;
   final List<Keyframe> keyframes;
 
   const ClipItem({
@@ -165,6 +176,8 @@ class ClipItem {
     this.sourceInMs = 0,
     this.sourceOutMs = 0,
     this.assetPath,
+    this.filePath,
+    this.isAsset = false,
     this.color = const Color(0xFF20C878),
     this.opacity = 1.0,
     this.scale = 1.0,
@@ -173,9 +186,15 @@ class ClipItem {
     this.speed = 1.0,
     this.volume = 1.0,
     this.textContent,
+    this.subtitleContent,
     this.fontFamily,
     this.fontSize = 24.0,
     this.textColor = Colors.white,
+    this.filterPreset,
+    this.filterIntensity = 0.8,
+    this.effectType,
+    this.effectIntensity = 0.7,
+    this.motionGraphicsType,
     this.keyframes = const [],
   });
 
@@ -191,6 +210,8 @@ class ClipItem {
     double? sourceInMs,
     double? sourceOutMs,
     String? assetPath,
+    String? filePath,
+    bool? isAsset,
     Color? color,
     double? opacity,
     double? scale,
@@ -199,9 +220,15 @@ class ClipItem {
     double? speed,
     double? volume,
     String? textContent,
+    String? subtitleContent,
     String? fontFamily,
     double? fontSize,
     Color? textColor,
+    String? filterPreset,
+    double? filterIntensity,
+    String? effectType,
+    double? effectIntensity,
+    String? motionGraphicsType,
     List<Keyframe>? keyframes,
   }) {
     return ClipItem(
@@ -214,6 +241,8 @@ class ClipItem {
       sourceInMs: sourceInMs ?? this.sourceInMs,
       sourceOutMs: sourceOutMs ?? this.sourceOutMs,
       assetPath: assetPath ?? this.assetPath,
+      filePath: filePath ?? this.filePath,
+      isAsset: isAsset ?? this.isAsset,
       color: color ?? this.color,
       opacity: opacity ?? this.opacity,
       scale: scale ?? this.scale,
@@ -222,9 +251,15 @@ class ClipItem {
       speed: speed ?? this.speed,
       volume: volume ?? this.volume,
       textContent: textContent ?? this.textContent,
+      subtitleContent: subtitleContent ?? this.subtitleContent,
       fontFamily: fontFamily ?? this.fontFamily,
       fontSize: fontSize ?? this.fontSize,
       textColor: textColor ?? this.textColor,
+      filterPreset: filterPreset ?? this.filterPreset,
+      filterIntensity: filterIntensity ?? this.filterIntensity,
+      effectType: effectType ?? this.effectType,
+      effectIntensity: effectIntensity ?? this.effectIntensity,
+      motionGraphicsType: motionGraphicsType ?? this.motionGraphicsType,
       keyframes: keyframes ?? this.keyframes,
     );
   }
@@ -291,11 +326,15 @@ class Video365Project {
     this.aspectRatio = AspectRatioType.ratio9_16,
     this.resolution = ResolutionType.res1080p,
     this.fps = FrameRateType.fps30,
-    this.durationMs = 14000.0,
+    this.durationMs = 0.0,
     this.tracks = const [],
     this.subtitles = const [],
     this.thumbnailAsset,
   });
+
+  bool get isEmpty {
+    return tracks.every((t) => t.clips.isEmpty);
+  }
 
   Video365Project copyWith({
     String? id,

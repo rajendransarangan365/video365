@@ -364,3 +364,4 @@ class _Video365IconPainter extends CustomPainter {
     return oldDelegate.type != type || oldDelegate.color != color;
   }
 }
+
