@@ -47,10 +47,11 @@ enum FrameRateType {
 
 enum TrackType {
   video('Video', Icons.video_collection_outlined),
+  image('Image/GIF', Icons.image_outlined),
   text('Text', Icons.title_rounded),
   audio('Audio', Icons.music_note_rounded),
   voiceover('Voiceover', Icons.mic_rounded),
-  effect('Effect', Icons.auto_fix_high_rounded),
+  effect('FX Layer', Icons.auto_fix_high_rounded),
   adjustment('Adjustment', Icons.tune_rounded);
 
   final String label;

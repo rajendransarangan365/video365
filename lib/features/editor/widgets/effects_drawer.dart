@@ -248,3 +248,4 @@ class _EffectsDrawerState extends ConsumerState<EffectsDrawer> {
     );
   }
 }
+

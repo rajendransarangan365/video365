@@ -6,6 +6,7 @@ import '../../../providers/editor_provider.dart';
 import '../../captions/widgets/auto_captions_sheet.dart';
 import '../../export/widgets/export_modal_sheet.dart';
 import '../../radial_menu/widgets/radial_editing_menu.dart';
+import '../widgets/add_track_sheet.dart';
 import '../widgets/bottom_tool_bar.dart';
 import '../widgets/editor_top_nav_bar.dart';
 import '../widgets/effects_drawer.dart';
@@ -71,6 +72,15 @@ class EditorScreen extends ConsumerWidget {
                 right: 0,
                 bottom: 0,
                 child: const MediaImportSheet(),
+              ),
+
+            // Modal Layer 1.5: Add Track Sheet
+            if (editorState.isAddTrackSheetOpen)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: const AddTrackSheet(),
               ),
 
             // Modal Layer 2: Radial Editing Wheel

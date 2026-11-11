@@ -18,7 +18,6 @@ class _MediaImportSheetState extends ConsumerState<MediaImportSheet> {
     final media = await MediaService.pickVideo();
     if (media != null) {
       ref.read(editorProvider.notifier).addMediaClip(media);
-      ref.read(editorProvider.notifier).toggleMediaBrowser();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -34,7 +33,6 @@ class _MediaImportSheetState extends ConsumerState<MediaImportSheet> {
     final media = await MediaService.pickImageOrGif();
     if (media != null) {
       ref.read(editorProvider.notifier).addMediaClip(media);
-      ref.read(editorProvider.notifier).toggleMediaBrowser();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -50,7 +48,6 @@ class _MediaImportSheetState extends ConsumerState<MediaImportSheet> {
     final media = await MediaService.pickAudio();
     if (media != null) {
       ref.read(editorProvider.notifier).addMediaClip(media);
-      ref.read(editorProvider.notifier).toggleMediaBrowser();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -232,7 +229,6 @@ class _MediaImportSheetState extends ConsumerState<MediaImportSheet> {
                         ),
                         onPressed: () {
                           ref.read(editorProvider.notifier).addMediaClip(item);
-                          ref.read(editorProvider.notifier).toggleMediaBrowser();
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(content: Text('Added ${item.fileName} to timeline!')),
                           );
@@ -286,3 +282,4 @@ class _MediaImportSheetState extends ConsumerState<MediaImportSheet> {
     );
   }
 }
+

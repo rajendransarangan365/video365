@@ -168,3 +168,4 @@ class TrimDrawer extends ConsumerWidget {
     );
   }
 }
+

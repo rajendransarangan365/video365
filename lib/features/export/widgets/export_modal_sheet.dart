@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/video365_colors.dart';
-import '../../../models/project_model.dart';
 import '../../../providers/editor_provider.dart';
 
 class ExportModalSheet extends ConsumerStatefulWidget {

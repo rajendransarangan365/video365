@@ -18,6 +18,7 @@ class EditorState {
   final bool isCaptionsSheetOpen;
   final bool isExportSheetOpen;
   final bool isMediaBrowserOpen;
+  final bool isAddTrackSheetOpen;
   final bool isFullscreen;
   final bool isAudioMuted;
   final CaptionStyle captionStyle;
@@ -40,6 +41,7 @@ class EditorState {
     this.isCaptionsSheetOpen = false,
     this.isExportSheetOpen = false,
     this.isMediaBrowserOpen = false,
+    this.isAddTrackSheetOpen = false,
     this.isFullscreen = false,
     this.isAudioMuted = false,
     this.captionStyle = CaptionStyle.karaoke,
@@ -51,18 +53,40 @@ class EditorState {
     this.activeEffectIntensity = 0.7,
   });
 
+  ClipItem? get selectedClip {
+    if (selectedClipId == null) return null;
+    for (final track in project.tracks) {
+      for (final clip in track.clips) {
+        if (clip.id == selectedClipId) return clip;
+      }
+    }
+    return null;
+  }
+
+  TrackItem? get selectedTrack {
+    if (selectedTrackId == null) return null;
+    try {
+      return project.tracks.firstWhere((t) => t.id == selectedTrackId);
+    } catch (_) {
+      return null;
+    }
+  }
+
   EditorState copyWith({
     Video365Project? project,
     double? currentTimeMs,
     bool? isPlaying,
     String? selectedClipId,
+    bool clearSelectedClip = false,
     String? selectedTrackId,
+    bool clearSelectedTrack = false,
     double? zoomScale,
     BottomTool? activeTool,
     bool? isRadialMenuOpen,
     bool? isCaptionsSheetOpen,
     bool? isExportSheetOpen,
     bool? isMediaBrowserOpen,
+    bool? isAddTrackSheetOpen,
     bool? isFullscreen,
     bool? isAudioMuted,
     CaptionStyle? captionStyle,
@@ -77,26 +101,24 @@ class EditorState {
       project: project ?? this.project,
       currentTimeMs: currentTimeMs ?? this.currentTimeMs,
       isPlaying: isPlaying ?? this.isPlaying,
-      selectedClipId: selectedClipId ?? this.selectedClipId,
-      selectedTrackId: selectedTrackId ?? this.selectedTrackId,
+      selectedClipId: clearSelectedClip ? null : (selectedClipId ?? this.selectedClipId),
+      selectedTrackId: clearSelectedTrack ? null : (selectedTrackId ?? this.selectedTrackId),
       zoomScale: zoomScale ?? this.zoomScale,
       activeTool: activeTool ?? this.activeTool,
       isRadialMenuOpen: isRadialMenuOpen ?? this.isRadialMenuOpen,
       isCaptionsSheetOpen: isCaptionsSheetOpen ?? this.isCaptionsSheetOpen,
       isExportSheetOpen: isExportSheetOpen ?? this.isExportSheetOpen,
       isMediaBrowserOpen: isMediaBrowserOpen ?? this.isMediaBrowserOpen,
+      isAddTrackSheetOpen: isAddTrackSheetOpen ?? this.isAddTrackSheetOpen,
       isFullscreen: isFullscreen ?? this.isFullscreen,
       isAudioMuted: isAudioMuted ?? this.isAudioMuted,
       captionStyle: captionStyle ?? this.captionStyle,
-      captionHighlightColor:
-          captionHighlightColor ?? this.captionHighlightColor,
+      captionHighlightColor: captionHighlightColor ?? this.captionHighlightColor,
       playbackSpeed: playbackSpeed ?? this.playbackSpeed,
       activeFilterPreset: activeFilterPreset ?? this.activeFilterPreset,
-      activeFilterIntensity:
-          activeFilterIntensity ?? this.activeFilterIntensity,
+      activeFilterIntensity: activeFilterIntensity ?? this.activeFilterIntensity,
       activeEffectType: activeEffectType ?? this.activeEffectType,
-      activeEffectIntensity:
-          activeEffectIntensity ?? this.activeEffectIntensity,
+      activeEffectIntensity: activeEffectIntensity ?? this.activeEffectIntensity,
     );
   }
 }
@@ -113,14 +135,7 @@ class EditorNotifier extends Notifier<EditorState> {
   }
 
   static EditorState _createInitialEmptyState() {
-    final emptyProject = _createEmptyProject('Untitled Project');
-    return EditorState(
-      project: emptyProject,
-      currentTimeMs: 0.0,
-      selectedClipId: null,
-      selectedTrackId: null,
-      activeTool: BottomTool.none,
-    );
+    return EditorState(project: _createEmptyProject('Untitled Project'));
   }
 
   static Video365Project _createEmptyProject(
@@ -129,8 +144,9 @@ class EditorNotifier extends Notifier<EditorState> {
     ResolutionType res = ResolutionType.res1080p,
     FrameRateType fps = FrameRateType.fps30,
   }) {
+    final ts = DateTime.now().millisecondsSinceEpoch;
     return Video365Project(
-      id: 'proj_${DateTime.now().millisecondsSinceEpoch}',
+      id: 'proj_$ts',
       name: name,
       createdAt: DateTime.now(),
       modifiedAt: DateTime.now(),
@@ -139,276 +155,248 @@ class EditorNotifier extends Notifier<EditorState> {
       fps: fps,
       durationMs: 0.0,
       tracks: [
-        const TrackItem(id: 'track_effect', type: TrackType.effect, name: 'Effects', clips: []),
-        const TrackItem(id: 'track_text', type: TrackType.text, name: 'Text', clips: []),
-        const TrackItem(id: 'track_video', type: TrackType.video, name: 'Video', clips: []),
-        const TrackItem(id: 'track_audio', type: TrackType.audio, name: 'Audio', clips: []),
-        const TrackItem(id: 'track_voice', type: TrackType.voiceover, name: 'Voice', clips: []),
+        TrackItem(id: 'track_v1_$ts', type: TrackType.video, name: 'V1', clips: []),
+        TrackItem(id: 'track_a1_$ts', type: TrackType.audio, name: 'A1', clips: []),
       ],
       subtitles: [],
     );
   }
 
   static Video365Project createDemoProject() {
+    final ts = DateTime.now().millisecondsSinceEpoch;
     final videoClips = [
-      ClipItem(
-        id: 'clip_video_0',
-        trackId: 'track_video',
-        type: TrackType.video,
-        title: 'Lisbon Intro',
-        startMs: 0.0,
-        durationMs: 4000.0,
-        color: const Color(0xFF1E2638),
-        assetPath: 'assets/samples/sample_video365.mp4',
-        isAsset: true,
-      ),
-      ClipItem(
-        id: 'clip_video_1',
-        trackId: 'track_video',
-        type: TrackType.video,
-        title: 'Sunday in Lisbon',
-        startMs: 4000.0,
-        durationMs: 4000.0,
-        color: const Color(0xFF20C878),
-        assetPath: 'assets/samples/sample_video365.mp4',
-        isAsset: true,
-      ),
-      ClipItem(
-        id: 'clip_video_2',
-        trackId: 'track_video',
-        type: TrackType.video,
-        title: 'Sunset View',
-        startMs: 8000.0,
-        durationMs: 6000.0,
-        color: const Color(0xFF1E2638),
-        assetPath: 'assets/samples/sample_video365.mp4',
-        isAsset: true,
-      ),
+      ClipItem(id: 'clip_v0', trackId: 'track_v1_$ts', type: TrackType.video,
+        title: 'Lisbon Intro', startMs: 0, durationMs: 4000,
+        color: const Color(0xFF1565C0), isAsset: true, assetPath: 'assets/samples/sample_video365.mp4'),
+      ClipItem(id: 'clip_v1', trackId: 'track_v1_$ts', type: TrackType.video,
+        title: 'Sunday in Lisbon', startMs: 4000, durationMs: 4000,
+        color: const Color(0xFF20C878), isAsset: true, assetPath: 'assets/samples/sample_video365.mp4'),
+      ClipItem(id: 'clip_v2', trackId: 'track_v1_$ts', type: TrackType.video,
+        title: 'Sunset View', startMs: 8000, durationMs: 6000,
+        color: const Color(0xFF1565C0), isAsset: true, assetPath: 'assets/samples/sample_video365.mp4'),
     ];
-
     final textClips = [
-      const ClipItem(
-        id: 'clip_text_1',
-        trackId: 'track_text',
-        type: TrackType.text,
-        title: 'Sunday in Lisbon',
-        startMs: 2000.0,
-        durationMs: 5000.0,
-        color: Color(0xFF2563EB),
-        textContent: 'Sunday in Lisbon',
-        subtitleContent: 'CINEMATIC VLOG',
-        motionGraphicsType: 'lower_third_minimal',
-        fontSize: 32.0,
-      ),
+      ClipItem(id: 'clip_t1', trackId: 'track_t1_$ts', type: TrackType.text,
+        title: 'Sunday in Lisbon', startMs: 2000, durationMs: 5000,
+        color: const Color(0xFF7C3AED), textContent: 'Sunday in Lisbon',
+        motionGraphicsType: 'lower_third_minimal', fontSize: 32),
     ];
-
     final audioClips = [
-      const ClipItem(
-        id: 'clip_audio_1',
-        trackId: 'track_audio',
-        type: TrackType.audio,
-        title: 'Acoustic Morning Vibes',
-        startMs: 0.0,
-        durationMs: 14000.0,
-        color: Color(0xFF4F46E5),
-      ),
+      ClipItem(id: 'clip_a1', trackId: 'track_a1_$ts', type: TrackType.audio,
+        title: 'Acoustic Morning Vibes', startMs: 0, durationMs: 14000,
+        color: const Color(0xFF4F46E5)),
     ];
-
-    final tracks = [
-      const TrackItem(id: 'track_effect', type: TrackType.effect, name: 'Effects', clips: []),
-      TrackItem(id: 'track_text', type: TrackType.text, name: 'Text', clips: textClips),
-      TrackItem(id: 'track_video', type: TrackType.video, name: 'Video', clips: videoClips),
-      TrackItem(id: 'track_audio', type: TrackType.audio, name: 'Music', clips: audioClips),
-      const TrackItem(id: 'track_voice', type: TrackType.voiceover, name: 'Voice', clips: []),
-    ];
-
-    final subtitles = [
-      const SubtitleItem(
-        id: 'sub_1',
-        startMs: 400.0,
-        endMs: 3500.0,
-        text: "okay so it's Sunday morning in Lisbon",
-        words: [
-          SubtitleWord(startMs: 400, endMs: 800, word: "okay"),
-          SubtitleWord(startMs: 850, endMs: 1100, word: "so"),
-          SubtitleWord(startMs: 1150, endMs: 1400, word: "it's"),
-          SubtitleWord(startMs: 1450, endMs: 1900, word: "Sunday"),
-          SubtitleWord(startMs: 1950, endMs: 2400, word: "morning"),
-          SubtitleWord(startMs: 2450, endMs: 2700, word: "in"),
-          SubtitleWord(startMs: 2750, endMs: 3500, word: "Lisbon"),
-        ],
-      ),
-      const SubtitleItem(
-        id: 'sub_2',
-        startMs: 3800.0,
-        endMs: 5800.0,
-        text: "we found this tiny bakery",
-        words: [
-          SubtitleWord(startMs: 3800, endMs: 4000, word: "we"),
-          SubtitleWord(startMs: 4050, endMs: 4350, word: "found"),
-          SubtitleWord(startMs: 4400, endMs: 4600, word: "this"),
-          SubtitleWord(startMs: 4650, endMs: 5100, word: "tiny"),
-          SubtitleWord(startMs: 5150, endMs: 5800, word: "bakery"),
-        ],
-      ),
-      const SubtitleItem(
-        id: 'sub_3',
-        startMs: 6100.0,
-        endMs: 8500.0,
-        text: "and honestly the pastel de nata here",
-        words: [
-          SubtitleWord(startMs: 6100, endMs: 6300, word: "and"),
-          SubtitleWord(startMs: 6350, endMs: 6800, word: "honestly"),
-          SubtitleWord(startMs: 6850, endMs: 7000, word: "the"),
-          SubtitleWord(startMs: 7050, endMs: 7500, word: "pastel"),
-          SubtitleWord(startMs: 7550, endMs: 7750, word: "de"),
-          SubtitleWord(startMs: 7800, endMs: 8100, word: "nata"),
-          SubtitleWord(startMs: 8150, endMs: 8500, word: "here"),
-        ],
-      ),
-      const SubtitleItem(
-        id: 'sub_4',
-        startMs: 9000.0,
-        endMs: 12500.0,
-        text: "is the best thing I've eaten all year",
-        words: [
-          SubtitleWord(startMs: 9000, endMs: 9200, word: "is"),
-          SubtitleWord(startMs: 9250, endMs: 9400, word: "the"),
-          SubtitleWord(startMs: 9450, endMs: 9750, word: "best"),
-          SubtitleWord(startMs: 9800, endMs: 10100, word: "thing"),
-          SubtitleWord(startMs: 10150, endMs: 10400, word: "I've"),
-          SubtitleWord(startMs: 10450, endMs: 10850, word: "eaten"),
-          SubtitleWord(startMs: 10900, endMs: 11100, word: "all"),
-          SubtitleWord(startMs: 11150, endMs: 12500, word: "year"),
-        ],
-      ),
-    ];
-
     return Video365Project(
-      id: 'proj_demo_1',
+      id: 'proj_demo',
       name: 'Sunday in Lisbon',
       createdAt: DateTime.now().subtract(const Duration(hours: 2)),
       modifiedAt: DateTime.now(),
       aspectRatio: AspectRatioType.ratio9_16,
       resolution: ResolutionType.res1080p,
       fps: FrameRateType.fps30,
-      durationMs: 14000.0,
-      tracks: tracks,
-      subtitles: subtitles,
+      durationMs: 14000,
+      tracks: [
+        TrackItem(id: 'track_fx1_$ts', type: TrackType.effect, name: 'FX', clips: []),
+        TrackItem(id: 'track_t1_$ts', type: TrackType.text, name: 'T1', clips: textClips),
+        TrackItem(id: 'track_v1_$ts', type: TrackType.video, name: 'V1', clips: videoClips),
+        TrackItem(id: 'track_a1_$ts', type: TrackType.audio, name: 'A1', clips: audioClips),
+        TrackItem(id: 'track_vo1_$ts', type: TrackType.voiceover, name: 'VO', clips: []),
+      ],
+      subtitles: [],
     );
   }
 
-  void startNewProject(
-    String name, {
+  // ─── Project ──────────────────────────────────────────────────────────────
+
+  void startNewProject(String name, {
     AspectRatioType aspect = AspectRatioType.ratio9_16,
     ResolutionType res = ResolutionType.res1080p,
     FrameRateType fps = FrameRateType.fps30,
   }) {
     pause();
-    final p = _createEmptyProject(name, aspect: aspect, res: res, fps: fps);
-    state = state.copyWith(
-      project: p,
-      currentTimeMs: 0.0,
-      selectedClipId: null,
-      selectedTrackId: null,
-      activeTool: BottomTool.none,
-      isRadialMenuOpen: false,
-      isCaptionsSheetOpen: false,
-      isExportSheetOpen: false,
-    );
+    state = EditorState(project: _createEmptyProject(name, aspect: aspect, res: res, fps: fps));
   }
 
   void loadProject(Video365Project project) {
     pause();
+    state = EditorState(project: project);
+  }
+
+  // ─── Tracks ───────────────────────────────────────────────────────────────
+
+  void addTrack(TrackType type) {
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    final count = state.project.tracks.where((t) => t.type == type).length + 1;
+    final prefix = type.name[0].toUpperCase();
+    final newTrack = TrackItem(
+      id: 'track_${type.name}_$ts',
+      type: type,
+      name: '$prefix$count',
+      clips: [],
+    );
+
+    final tracks = List<TrackItem>.from(state.project.tracks);
+    // Insert at sensible position
+    int idx;
+    switch (type) {
+      case TrackType.effect:
+      case TrackType.adjustment:
+        idx = 0;
+        break;
+      case TrackType.text:
+        final firstMedia = tracks.indexWhere((t) =>
+          t.type == TrackType.video || t.type == TrackType.image ||
+          t.type == TrackType.audio || t.type == TrackType.voiceover);
+        idx = firstMedia == -1 ? tracks.length : firstMedia;
+        break;
+      case TrackType.video:
+      case TrackType.image:
+        final firstAudio = tracks.indexWhere((t) =>
+          t.type == TrackType.audio || t.type == TrackType.voiceover);
+        idx = firstAudio == -1 ? tracks.length : firstAudio;
+        break;
+      case TrackType.audio:
+        final firstVoice = tracks.indexWhere((t) => t.type == TrackType.voiceover);
+        idx = firstVoice == -1 ? tracks.length : firstVoice;
+        break;
+      default:
+        idx = tracks.length;
+    }
+
+    tracks.insert(idx, newTrack);
     state = state.copyWith(
-      project: project,
-      currentTimeMs: project.isEmpty ? 0.0 : math.min(project.durationMs, 4200.0),
-      selectedClipId: project.tracks.isNotEmpty && project.tracks.first.clips.isNotEmpty
-          ? project.tracks.first.clips.first.id
-          : null,
-      activeTool: BottomTool.none,
+      project: state.project.copyWith(tracks: tracks),
+      isAddTrackSheetOpen: false,
     );
   }
 
-  void addMediaClip(PickedMediaResult media) {
-    final trackId = media.type == TrackType.audio ? 'track_audio' : 'track_video';
+  void removeTrack(String trackId) {
+    // Need at least 1 track
+    if (state.project.tracks.length <= 1) return;
+    final tracks = state.project.tracks.where((t) => t.id != trackId).toList();
+    state = state.copyWith(
+      project: state.project.copyWith(tracks: tracks, durationMs: _calcMax(tracks)),
+      clearSelectedClip: true,
+      clearSelectedTrack: true,
+    );
+  }
 
-    // Find insertion start time: at playhead or end of existing track
-    final trackIndex = state.project.tracks.indexWhere((t) => t.id == trackId);
-    double insertStartMs = state.currentTimeMs;
-    if (trackIndex != -1 && state.project.tracks[trackIndex].clips.isNotEmpty) {
-      final lastClip = state.project.tracks[trackIndex].clips.last;
-      insertStartMs = lastClip.endMs;
+  void toggleTrackMute(String trackId) {
+    _mapTracks((t) => t.id == trackId ? t.copyWith(isMuted: !t.isMuted) : t);
+  }
+
+  void toggleTrackLock(String trackId) {
+    _mapTracks((t) => t.id == trackId ? t.copyWith(isLocked: !t.isLocked) : t);
+  }
+
+  void toggleTrackVisibility(String trackId) {
+    _mapTracks((t) => t.id == trackId ? t.copyWith(isHidden: !t.isHidden) : t);
+  }
+
+  void _mapTracks(TrackItem Function(TrackItem) fn) {
+    final tracks = state.project.tracks.map(fn).toList();
+    state = state.copyWith(project: state.project.copyWith(tracks: tracks));
+  }
+
+  // ─── Media ────────────────────────────────────────────────────────────────
+
+  void addMediaClip(PickedMediaResult media, {String? targetTrackId}) {
+    final tracks = List<TrackItem>.from(state.project.tracks);
+    String trackId;
+
+    if (targetTrackId != null && tracks.any((t) => t.id == targetTrackId)) {
+      trackId = targetTrackId;
+    } else {
+      // Find first compatible unlocked track
+      final compat = tracks.firstWhere(
+        (t) => t.type == media.type && !t.isLocked,
+        orElse: () => const TrackItem(id: '', type: TrackType.video, name: ''),
+      );
+      if (compat.id.isEmpty) {
+        // Create a new track
+        final ts2 = DateTime.now().millisecondsSinceEpoch;
+        final cnt = tracks.where((t) => t.type == media.type).length + 1;
+        final pfx = media.type.name[0].toUpperCase();
+        final newT = TrackItem(
+          id: 'track_${media.type.name}_$ts2',
+          type: media.type,
+          name: '$pfx$cnt',
+          clips: [],
+        );
+        tracks.add(newT);
+        trackId = newT.id;
+      } else {
+        trackId = compat.id;
+      }
     }
+
+    final track = tracks.firstWhere((t) => t.id == trackId);
+    final insertMs = track.clips.isEmpty
+        ? 0.0
+        : track.clips.map((c) => c.endMs).reduce(math.max);
 
     final newClip = ClipItem(
       id: 'clip_${DateTime.now().millisecondsSinceEpoch}',
       trackId: trackId,
       type: media.type,
       title: media.fileName,
-      startMs: insertStartMs,
-      durationMs: media.durationMs,
+      startMs: insertMs,
+      durationMs: media.durationMs > 0 ? media.durationMs : 5000.0,
       filePath: media.isAsset ? null : media.path,
       assetPath: media.isAsset ? media.path : null,
       isAsset: media.isAsset,
-      color: media.type == TrackType.audio ? const Color(0xFF4F46E5) : const Color(0xFF20C878),
+      color: _colorForType(media.type),
     );
 
-    final updatedTracks = state.project.tracks.map((track) {
-      if (track.id == trackId) {
-        return track.copyWith(clips: [...track.clips, newClip]);
-      }
-      return track;
+    final updatedTracks = tracks.map((t) {
+      if (t.id == trackId) return t.copyWith(clips: [...t.clips, newClip]);
+      return t;
     }).toList();
-
-    // Recalculate duration
-    double maxEnd = 0.0;
-    for (final t in updatedTracks) {
-      for (final c in t.clips) {
-        if (c.endMs > maxEnd) maxEnd = c.endMs;
-      }
-    }
 
     state = state.copyWith(
       project: state.project.copyWith(
         tracks: updatedTracks,
-        durationMs: maxEnd,
+        durationMs: _calcMax(updatedTracks),
+        modifiedAt: DateTime.now(),
       ),
       selectedClipId: newClip.id,
       selectedTrackId: trackId,
-      currentTimeMs: newClip.startMs,
+      isMediaBrowserOpen: false,
     );
   }
 
   void addEffectLayer(String effectType, {String? title, double intensity = 0.7}) {
-    final trackId = 'track_effect';
-    final insertStartMs = state.currentTimeMs;
-    const duration = 4000.0;
+    final fxTracks = state.project.tracks.where((t) => t.type == TrackType.effect).toList();
+    String trackId;
+    if (fxTracks.isEmpty) {
+      addTrack(TrackType.effect);
+      trackId = state.project.tracks.firstWhere((t) => t.type == TrackType.effect).id;
+    } else {
+      trackId = fxTracks.first.id;
+    }
 
     final newClip = ClipItem(
-      id: 'effect_${DateTime.now().millisecondsSinceEpoch}',
+      id: 'fx_${DateTime.now().millisecondsSinceEpoch}',
       trackId: trackId,
       type: TrackType.effect,
       title: title ?? 'FX: $effectType',
-      startMs: insertStartMs,
-      durationMs: duration,
+      startMs: state.currentTimeMs,
+      durationMs: 4000,
       effectType: effectType,
       effectIntensity: intensity,
-      color: const Color(0xFFD97706),
+      color: const Color(0xFFF59E0B),
     );
 
-    final updatedTracks = state.project.tracks.map((track) {
-      if (track.id == trackId) {
-        return track.copyWith(clips: [...track.clips, newClip]);
-      }
-      return track;
+    final updatedTracks = state.project.tracks.map((t) {
+      if (t.id == trackId) return t.copyWith(clips: [...t.clips, newClip]);
+      return t;
     }).toList();
 
-    double maxEnd = state.project.durationMs;
-    if (newClip.endMs > maxEnd) maxEnd = newClip.endMs;
-
     state = state.copyWith(
-      project: state.project.copyWith(tracks: updatedTracks, durationMs: maxEnd),
+      project: state.project.copyWith(
+        tracks: updatedTracks,
+        durationMs: _calcMax(updatedTracks),
+      ),
       selectedClipId: newClip.id,
       selectedTrackId: trackId,
       activeEffectType: effectType,
@@ -431,9 +419,14 @@ class EditorNotifier extends Notifier<EditorState> {
     String fontFamily = 'Roboto',
     double fontSize = 28.0,
   }) {
-    final trackId = 'track_text';
-    final insertStartMs = state.currentTimeMs;
-    const duration = 5000.0;
+    final textTracks = state.project.tracks.where((t) => t.type == TrackType.text).toList();
+    String trackId;
+    if (textTracks.isEmpty) {
+      addTrack(TrackType.text);
+      trackId = state.project.tracks.firstWhere((t) => t.type == TrackType.text).id;
+    } else {
+      trackId = textTracks.first.id;
+    }
 
     final newClip = ClipItem(
       id: 'text_${DateTime.now().millisecondsSinceEpoch}',
@@ -442,8 +435,8 @@ class EditorNotifier extends Notifier<EditorState> {
       title: title,
       textContent: title,
       subtitleContent: subtitle,
-      startMs: insertStartMs,
-      durationMs: duration,
+      startMs: state.currentTimeMs,
+      durationMs: 5000,
       color: color,
       textColor: Colors.white,
       fontFamily: fontFamily,
@@ -451,45 +444,60 @@ class EditorNotifier extends Notifier<EditorState> {
       motionGraphicsType: type,
     );
 
-    final updatedTracks = state.project.tracks.map((track) {
-      if (track.id == trackId) {
-        return track.copyWith(clips: [...track.clips, newClip]);
-      }
-      return track;
+    final updatedTracks = state.project.tracks.map((t) {
+      if (t.id == trackId) return t.copyWith(clips: [...t.clips, newClip]);
+      return t;
     }).toList();
 
-    double maxEnd = state.project.durationMs;
-    if (newClip.endMs > maxEnd) maxEnd = newClip.endMs;
-
     state = state.copyWith(
-      project: state.project.copyWith(tracks: updatedTracks, durationMs: maxEnd),
+      project: state.project.copyWith(
+        tracks: updatedTracks,
+        durationMs: _calcMax(updatedTracks),
+      ),
       selectedClipId: newClip.id,
       selectedTrackId: trackId,
     );
   }
 
+  void updateClip(String clipId, ClipItem Function(ClipItem) fn) {
+    final updatedTracks = state.project.tracks.map((track) {
+      final idx = track.clips.indexWhere((c) => c.id == clipId);
+      if (idx == -1) return track;
+      final clips = List<ClipItem>.from(track.clips);
+      clips[idx] = fn(clips[idx]);
+      return track.copyWith(clips: clips);
+    }).toList();
+    state = state.copyWith(project: state.project.copyWith(tracks: updatedTracks));
+  }
+
+  void moveClip(String clipId, double newStartMs) {
+    updateClip(clipId, (c) => c.copyWith(startMs: math.max(0.0, newStartMs)));
+    _recalcDuration();
+  }
+
+  void _recalcDuration() {
+    final max = _calcMax(state.project.tracks);
+    state = state.copyWith(project: state.project.copyWith(durationMs: max));
+  }
+
+  // ─── Playback ─────────────────────────────────────────────────────────────
+
   void togglePlay() {
     if (state.project.isEmpty) return;
-    if (state.isPlaying) {
-      pause();
-    } else {
-      play();
-    }
+    state.isPlaying ? pause() : play();
   }
 
   void play() {
     if (state.project.isEmpty) return;
     _playbackTimer?.cancel();
     state = state.copyWith(isPlaying: true);
-
-    const tickMs = 33; // ~30 fps update
-    _playbackTimer = Timer.periodic(const Duration(milliseconds: tickMs), (timer) {
-      final nextTime = state.currentTimeMs + (tickMs * state.playbackSpeed);
-      if (nextTime >= state.project.durationMs) {
-        seekTo(0.0);
+    _playbackTimer = Timer.periodic(const Duration(milliseconds: 33), (_) {
+      final next = state.currentTimeMs + (33.0 * state.playbackSpeed);
+      if (next >= state.project.durationMs) {
+        seekTo(0);
         pause();
       } else {
-        state = state.copyWith(currentTimeMs: nextTime);
+        state = state.copyWith(currentTimeMs: next);
       }
     });
   }
@@ -497,180 +505,151 @@ class EditorNotifier extends Notifier<EditorState> {
   void pause() {
     _playbackTimer?.cancel();
     _playbackTimer = null;
-    state = state.copyWith(isPlaying: false);
+    if (state.isPlaying) state = state.copyWith(isPlaying: false);
   }
 
-  void seekTo(double timeMs) {
-    final maxDuration = state.project.isEmpty ? 0.0 : state.project.durationMs;
-    final clamped = timeMs.clamp(0.0, maxDuration);
-    state = state.copyWith(currentTimeMs: clamped);
+  void seekTo(double ms) {
+    final max = state.project.isEmpty ? 0.0 : state.project.durationMs;
+    state = state.copyWith(currentTimeMs: ms.clamp(0.0, max));
   }
+
+  void stepForward() {
+    seekTo(state.currentTimeMs + (1000.0 / state.project.fps.fps));
+  }
+
+  void stepBackward() {
+    seekTo(state.currentTimeMs - (1000.0 / state.project.fps.fps));
+  }
+
+  void jumpToStart() => seekTo(0);
+  void jumpToEnd() => seekTo(state.project.durationMs);
+
+  // ─── Selection ────────────────────────────────────────────────────────────
 
   void selectClip(String? clipId, {String? trackId}) {
     state = state.copyWith(
       selectedClipId: clipId,
+      clearSelectedClip: clipId == null,
       selectedTrackId: trackId,
+      clearSelectedTrack: trackId == null,
     );
   }
 
-  void setZoomScale(double scale) {
-    state = state.copyWith(zoomScale: scale.clamp(0.5, 4.0));
+  void deselectAll() {
+    state = state.copyWith(clearSelectedClip: true, clearSelectedTrack: true);
   }
 
-  void setBottomTool(BottomTool tool) {
-    if (tool == BottomTool.radial) {
-      toggleRadialMenu();
-    } else if (tool == BottomTool.captions) {
-      toggleCaptionsSheet();
-    } else if (tool == BottomTool.media) {
-      toggleMediaBrowser();
-    } else {
-      // Toggle or switch
-      if (state.activeTool == tool) {
-        state = state.copyWith(activeTool: BottomTool.none);
-      } else {
-        state = state.copyWith(activeTool: tool);
-      }
-    }
-  }
+  // ─── Zoom ─────────────────────────────────────────────────────────────────
 
-  void closeActiveDrawer() {
-    state = state.copyWith(activeTool: BottomTool.none);
-  }
+  void setZoomScale(double scale) => state = state.copyWith(zoomScale: scale.clamp(0.2, 8.0));
+  void zoomIn() => setZoomScale(state.zoomScale * 1.4);
+  void zoomOut() => setZoomScale(state.zoomScale / 1.4);
 
-  void toggleRadialMenu() {
-    state = state.copyWith(isRadialMenuOpen: !state.isRadialMenuOpen);
-  }
-
-  void toggleCaptionsSheet() {
-    state = state.copyWith(isCaptionsSheetOpen: !state.isCaptionsSheetOpen);
-  }
-
-  void toggleExportSheet() {
-    state = state.copyWith(isExportSheetOpen: !state.isExportSheetOpen);
-  }
-
-  void toggleMediaBrowser() {
-    state = state.copyWith(isMediaBrowserOpen: !state.isMediaBrowserOpen);
-  }
-
-  void toggleFullscreen() {
-    state = state.copyWith(isFullscreen: !state.isFullscreen);
-  }
-
-  void toggleMute() {
-    state = state.copyWith(isAudioMuted: !state.isAudioMuted);
-  }
-
-  void setAspectRatio(AspectRatioType ratio) {
-    state = state.copyWith(
-      project: state.project.copyWith(aspectRatio: ratio),
-    );
-  }
-
-  void cycleAspectRatio() {
-    final values = AspectRatioType.values;
-    final currentIndex = values.indexOf(state.project.aspectRatio);
-    final nextIndex = (currentIndex + 1) % values.length;
-    setAspectRatio(values[nextIndex]);
-  }
-
-  void setCaptionStyle(CaptionStyle style) {
-    state = state.copyWith(captionStyle: style);
-  }
-
-  void setCaptionHighlightColor(Color color) {
-    state = state.copyWith(captionHighlightColor: color);
-  }
-
-  void setClipSpeed(double speed) {
-    state = state.copyWith(playbackSpeed: speed);
-    final clipId = state.selectedClipId;
-    if (clipId == null) return;
-
-    final updatedTracks = state.project.tracks.map((track) {
-      final clipIndex = track.clips.indexWhere((c) => c.id == clipId);
-      if (clipIndex == -1) return track;
-
-      final clip = track.clips[clipIndex];
-      final newClips = List<ClipItem>.from(track.clips);
-      newClips[clipIndex] = clip.copyWith(speed: speed);
-      return track.copyWith(clips: newClips);
-    }).toList();
-
-    state = state.copyWith(
-      project: state.project.copyWith(tracks: updatedTracks),
-    );
-  }
+  // ─── Clip Ops ─────────────────────────────────────────────────────────────
 
   void splitSelectedClip() {
     final clipId = state.selectedClipId;
     if (clipId == null) return;
-
     final updatedTracks = state.project.tracks.map((track) {
-      final clipIndex = track.clips.indexWhere((c) => c.id == clipId);
-      if (clipIndex == -1) return track;
-
-      final clip = track.clips[clipIndex];
-      final splitPoint = state.currentTimeMs;
-
-      // Ensure split is within the clip boundaries
-      if (splitPoint <= clip.startMs + 200 || splitPoint >= clip.endMs - 200) {
-        return track;
-      }
-
-      final firstDuration = splitPoint - clip.startMs;
-      final secondDuration = clip.durationMs - firstDuration;
-
-      final firstClip = clip.copyWith(
-        id: '${clip.id}_part1',
-        durationMs: firstDuration,
-      );
-
-      final secondClip = clip.copyWith(
-        id: '${clip.id}_part2',
-        startMs: splitPoint,
-        durationMs: secondDuration,
-        sourceInMs: clip.sourceInMs + firstDuration,
-      );
-
-      final newClips = List<ClipItem>.from(track.clips);
-      newClips.removeAt(clipIndex);
-      newClips.insert(clipIndex, firstClip);
-      newClips.insert(clipIndex + 1, secondClip);
-
-      return track.copyWith(clips: newClips);
+      final idx = track.clips.indexWhere((c) => c.id == clipId);
+      if (idx == -1) return track;
+      final clip = track.clips[idx];
+      final split = state.currentTimeMs;
+      if (split <= clip.startMs + 100 || split >= clip.endMs - 100) return track;
+      final d1 = split - clip.startMs;
+      final d2 = clip.durationMs - d1;
+      final c1 = clip.copyWith(id: '${clip.id}_a', durationMs: d1);
+      final c2 = clip.copyWith(id: '${clip.id}_b', startMs: split, durationMs: d2, sourceInMs: clip.sourceInMs + d1);
+      final clips = List<ClipItem>.from(track.clips);
+      clips.removeAt(idx);
+      clips.insert(idx, c1);
+      clips.insert(idx + 1, c2);
+      return track.copyWith(clips: clips);
     }).toList();
-
     state = state.copyWith(
       project: state.project.copyWith(tracks: updatedTracks),
-      selectedClipId: '${clipId}_part1',
+      selectedClipId: '${clipId}_a',
     );
   }
 
   void deleteSelectedClip() {
     final clipId = state.selectedClipId;
     if (clipId == null) return;
-
-    final updatedTracks = state.project.tracks.map((track) {
-      final newClips = track.clips.where((c) => c.id != clipId).toList();
-      return track.copyWith(clips: newClips);
+    final updatedTracks = state.project.tracks.map((t) {
+      return t.copyWith(clips: t.clips.where((c) => c.id != clipId).toList());
     }).toList();
+    state = state.copyWith(
+      project: state.project.copyWith(tracks: updatedTracks, durationMs: _calcMax(updatedTracks)),
+      clearSelectedClip: true,
+      clearSelectedTrack: true,
+    );
+  }
 
-    double maxEnd = 0.0;
-    for (final t in updatedTracks) {
+  void setClipSpeed(double speed) {
+    state = state.copyWith(playbackSpeed: speed);
+    if (state.selectedClipId != null) {
+      updateClip(state.selectedClipId!, (c) => c.copyWith(speed: speed));
+    }
+  }
+
+  // ─── UI ───────────────────────────────────────────────────────────────────
+
+  void setBottomTool(BottomTool tool) {
+    if (tool == BottomTool.radial) {
+      state = state.copyWith(isRadialMenuOpen: !state.isRadialMenuOpen);
+    } else if (tool == BottomTool.captions) {
+      state = state.copyWith(isCaptionsSheetOpen: !state.isCaptionsSheetOpen);
+    } else if (tool == BottomTool.media) {
+      state = state.copyWith(isMediaBrowserOpen: !state.isMediaBrowserOpen);
+    } else {
+      state = state.copyWith(activeTool: state.activeTool == tool ? BottomTool.none : tool);
+    }
+  }
+
+  void closeActiveDrawer() => state = state.copyWith(activeTool: BottomTool.none);
+  void toggleRadialMenu() => state = state.copyWith(isRadialMenuOpen: !state.isRadialMenuOpen);
+  void toggleCaptionsSheet() => state = state.copyWith(isCaptionsSheetOpen: !state.isCaptionsSheetOpen);
+  void toggleExportSheet() => state = state.copyWith(isExportSheetOpen: !state.isExportSheetOpen);
+  void toggleMediaBrowser() => state = state.copyWith(isMediaBrowserOpen: !state.isMediaBrowserOpen);
+  void toggleAddTrackSheet() => state = state.copyWith(isAddTrackSheetOpen: !state.isAddTrackSheetOpen);
+  void toggleFullscreen() => state = state.copyWith(isFullscreen: !state.isFullscreen);
+  void toggleMute() => state = state.copyWith(isAudioMuted: !state.isAudioMuted);
+
+  void setAspectRatio(AspectRatioType ratio) {
+    state = state.copyWith(project: state.project.copyWith(aspectRatio: ratio));
+  }
+
+  void cycleAspectRatio() {
+    final vals = AspectRatioType.values;
+    setAspectRatio(vals[(vals.indexOf(state.project.aspectRatio) + 1) % vals.length]);
+  }
+
+  void setCaptionStyle(CaptionStyle s) => state = state.copyWith(captionStyle: s);
+  void setCaptionHighlightColor(Color c) => state = state.copyWith(captionHighlightColor: c);
+
+  // ─── Utils ────────────────────────────────────────────────────────────────
+
+  static double _calcMax(List<TrackItem> tracks) {
+    double max = 0;
+    for (final t in tracks) {
       for (final c in t.clips) {
-        if (c.endMs > maxEnd) maxEnd = c.endMs;
+        if (c.endMs > max) max = c.endMs;
       }
     }
+    return max;
+  }
 
-    state = state.copyWith(
-      project: state.project.copyWith(tracks: updatedTracks, durationMs: maxEnd),
-      selectedClipId: null,
-      selectedTrackId: null,
-    );
+  static Color _colorForType(TrackType type) {
+    switch (type) {
+      case TrackType.video: return const Color(0xFF1565C0);
+      case TrackType.audio: return const Color(0xFF4F46E5);
+      case TrackType.text: return const Color(0xFF7C3AED);
+      case TrackType.effect: return const Color(0xFFF59E0B);
+      case TrackType.voiceover: return const Color(0xFF059669);
+      case TrackType.image: return const Color(0xFF0891B2);
+      case TrackType.adjustment: return const Color(0xFFDC2626);
+    }
   }
 }
 
-final editorProvider =
-    NotifierProvider<EditorNotifier, EditorState>(EditorNotifier.new);
+final editorProvider = NotifierProvider<EditorNotifier, EditorState>(EditorNotifier.new);

@@ -118,21 +118,35 @@ class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
     final currentAspect = editorState.project.aspectRatio;
     final currentTime = editorState.currentTimeMs;
 
-    // Find active video clip
-    final videoTrack = editorState.project.tracks.firstWhere(
-      (t) => t.type == TrackType.video,
-      orElse: () => const TrackItem(id: '', type: TrackType.video, name: ''),
-    );
+    // Find active video/image clip across all visible tracks at currentTime
+    ClipItem? activeVideoClip;
+    for (final track in editorState.project.tracks) {
+      if (track.isHidden) continue;
+      if (track.type == TrackType.video || track.type == TrackType.image) {
+        for (final clip in track.clips) {
+          if (currentTime >= clip.startMs && currentTime <= clip.endMs) {
+            activeVideoClip = clip;
+            break;
+          }
+        }
+        if (activeVideoClip != null) break;
+      }
+    }
 
-    final activeVideoClip = videoTrack.clips.firstWhere(
-      (c) => currentTime >= c.startMs && currentTime <= c.endMs,
-      orElse: () => videoTrack.clips.isNotEmpty
-          ? videoTrack.clips.first
-          : const ClipItem(id: '', trackId: '', type: TrackType.video, title: '', startMs: 0, durationMs: 0),
-    );
+    // Fallback: if no clip is exactly at playhead, use first available video/image clip
+    if (activeVideoClip == null) {
+      for (final track in editorState.project.tracks) {
+        if (!track.isHidden && (track.type == TrackType.video || track.type == TrackType.image)) {
+          if (track.clips.isNotEmpty) {
+            activeVideoClip = track.clips.first;
+            break;
+          }
+        }
+      }
+    }
 
     // Sync player source if clip exists
-    if (activeVideoClip.id.isNotEmpty) {
+    if (activeVideoClip != null && activeVideoClip.id.isNotEmpty) {
       _updatePlayerSource(activeVideoClip);
     } else {
       _updatePlayerSource(null);
@@ -147,15 +161,20 @@ class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
       }
     }
 
-    // Find active motion graphics / text clip
-    final textTrack = editorState.project.tracks.firstWhere(
-      (t) => t.type == TrackType.text,
-      orElse: () => const TrackItem(id: '', type: TrackType.text, name: ''),
-    );
-    final activeTextClip = textTrack.clips.firstWhere(
-      (c) => currentTime >= c.startMs && currentTime <= c.endMs,
-      orElse: () => const ClipItem(id: '', trackId: '', type: TrackType.text, title: '', startMs: 0, durationMs: 0),
-    );
+    // Find active motion graphics / text clip across all text tracks
+    ClipItem? activeTextClip;
+    for (final track in editorState.project.tracks) {
+      if (track.isHidden) continue;
+      if (track.type == TrackType.text) {
+        for (final clip in track.clips) {
+          if (currentTime >= clip.startMs && currentTime <= clip.endMs) {
+            activeTextClip = clip;
+            break;
+          }
+        }
+        if (activeTextClip != null) break;
+      }
+    }
 
     // Active color filter
     final filter = _getColorFilter(
@@ -186,7 +205,7 @@ class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
               fit: StackFit.expand,
               children: [
                 // 1. Content: Empty Canvas OR Active Video Player
-                if (editorState.project.isEmpty || activeVideoClip.id.isEmpty) ...[
+                if (editorState.project.isEmpty || activeVideoClip == null || activeVideoClip.id.isEmpty) ...[
                   // CLEAN EMPTY STATE (No fake videos!)
                   _buildEmptyProjectCanvas(context, editorNotifier),
                 ] else ...[
@@ -204,7 +223,7 @@ class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
                 ],
 
                 // 2. Motion Graphics & Lower Thirds Overlay (After Effects / JSX style)
-                if (activeTextClip.id.isNotEmpty && activeTextClip.textContent != null)
+                if (activeTextClip != null && activeTextClip.id.isNotEmpty && activeTextClip.textContent != null)
                   _buildMotionGraphicsOverlay(activeTextClip),
 
                 // 3. Bottom-Left Aspect Ratio Badge (NO EMOJIS!)
