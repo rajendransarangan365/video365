@@ -21,101 +21,117 @@ class EditorTopNavBar extends ConsumerWidget {
         color: Video365Colors.mainBg,
       ),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Close / Back button
+          // 1. Back button (Matching Reference Image 1)
           GestureDetector(
             onTap: onBack ?? () => Navigator.of(context).maybePop(),
             behavior: HitTestBehavior.opaque,
             child: Container(
-              width: 40,
-              height: 40,
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.06),
+              ),
               alignment: Alignment.center,
-              child: const Video365Icon(
-                Video365IconType.close,
+              child: const Icon(
+                Icons.arrow_back_ios_new_rounded,
                 size: 18,
                 color: Video365Colors.primaryText,
               ),
             ),
           ),
-          const SizedBox(width: 8),
 
-          // Undo / Redo controls pill
-          Container(
-            height: 36,
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            decoration: BoxDecoration(
-              color: Video365Colors.panelBg,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Video365Colors.cardBorder, width: 1),
-            ),
+          // 2. Project Title with Tap to Rename (Matching Reference Image 1 "Untitle Project")
+          GestureDetector(
+            onTap: () {
+              final textController = TextEditingController(text: editorState.project.name);
+              showDialog(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  backgroundColor: Video365Colors.panelBg,
+                  title: const Text(
+                    'Rename Project',
+                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                  content: TextField(
+                    controller: textController,
+                    style: const TextStyle(color: Colors.white),
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: const Color(0xFF11151D),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      child: const Text('Cancel', style: TextStyle(color: Video365Colors.secondaryText)),
+                    ),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: Video365Colors.activeGreen),
+                      onPressed: () {
+                        editorNotifier.renameProject(textController.text);
+                        Navigator.of(ctx).pop();
+                      },
+                      child: const Text('Save', style: TextStyle(color: Color(0xFF080A0E), fontWeight: FontWeight.w700)),
+                    ),
+                  ],
+                ),
+              );
+            },
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                IconButton(
-                  icon: const Icon(Icons.undo_rounded, size: 20, color: Video365Colors.primaryText),
-                  onPressed: () {},
-                  splashRadius: 18,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                Text(
+                  editorState.project.name,
+                  style: const TextStyle(
+                    color: Video365Colors.primaryText,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.2,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                Container(
-                  width: 1,
-                  height: 18,
-                  color: Video365Colors.cardBorder,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.redo_rounded, size: 20, color: Video365Colors.secondaryText),
-                  onPressed: () {},
-                  splashRadius: 18,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                const SizedBox(width: 4),
+                const Icon(
+                  Icons.edit_outlined,
+                  size: 13,
+                  color: Video365Colors.secondaryText,
                 ),
               ],
             ),
           ),
 
-          const Spacer(),
-
-          // Project Title
-          Text(
-            editorState.project.name,
-            style: const TextStyle(
-              color: Video365Colors.primaryText,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.3,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-
-          const Spacer(),
-
-          // Vibrant Green [ ↑ Export ] Button (matching Screenshot 4 Screen 1)
+          // 3. Export / Checkmark Action Button (Matching Reference Image 1)
           GestureDetector(
             onTap: () {
               editorNotifier.toggleExportSheet();
             },
+            behavior: HitTestBehavior.opaque,
             child: Container(
-              height: 36,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              height: 38,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
               decoration: BoxDecoration(
                 color: Video365Colors.activeGreen,
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: BorderRadius.circular(19),
                 boxShadow: [
                   BoxShadow(
-                    color: Video365Colors.activeGreen.withOpacity(0.3),
-                    blurRadius: 12,
-                    offset: const Offset(0, 3),
+                    color: Video365Colors.activeGreen.withValues(alpha: 0.35),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
                   ),
                 ],
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: const [
-                  Video365Icon(
-                    Video365IconType.export,
-                    size: 14,
+                  Icon(
+                    Icons.check_rounded,
+                    size: 18,
                     color: Color(0xFF080A0E),
                   ),
                   SizedBox(width: 6),
@@ -125,7 +141,7 @@ class EditorTopNavBar extends ConsumerWidget {
                       color: Color(0xFF080A0E),
                       fontSize: 13,
                       fontWeight: FontWeight.w800,
-                      letterSpacing: 0.4,
+                      letterSpacing: 0.3,
                     ),
                   ),
                 ],

@@ -182,9 +182,17 @@ class EditorNotifier extends Notifier<EditorState> {
         motionGraphicsType: 'lower_third_minimal', fontSize: 32),
     ];
     final audioClips = [
-      ClipItem(id: 'clip_a1', trackId: 'track_a1_$ts', type: TrackType.audio,
-        title: 'Acoustic Morning Vibes', startMs: 0, durationMs: 14000,
-        color: const Color(0xFF4F46E5)),
+      ClipItem(
+        id: 'clip_a1',
+        trackId: 'track_a1_$ts',
+        type: TrackType.audio,
+        title: 'Acoustic Morning Vibes',
+        startMs: 0,
+        durationMs: 14000,
+        color: const Color(0xFF4F46E5),
+        isAsset: true,
+        assetPath: 'assets/samples/sample_video365.mp4',
+      ),
     ];
     return Video365Project(
       id: 'proj_demo',
@@ -206,6 +214,38 @@ class EditorNotifier extends Notifier<EditorState> {
     );
   }
 
+  final List<Video365Project> _undoStack = [];
+  final List<Video365Project> _redoStack = [];
+
+  bool get canUndo => _undoStack.isNotEmpty;
+  bool get canRedo => _redoStack.isNotEmpty;
+
+  void _recordHistory() {
+    _undoStack.add(state.project);
+    if (_undoStack.length > 40) _undoStack.removeAt(0);
+    _redoStack.clear();
+  }
+
+  void undo() {
+    if (_undoStack.isEmpty) return;
+    _redoStack.add(state.project);
+    final prev = _undoStack.removeLast();
+    state = state.copyWith(project: prev);
+  }
+
+  void redo() {
+    if (_redoStack.isEmpty) return;
+    _undoStack.add(state.project);
+    final next = _redoStack.removeLast();
+    state = state.copyWith(project: next);
+  }
+
+  void renameProject(String newName) {
+    if (newName.trim().isEmpty) return;
+    _recordHistory();
+    state = state.copyWith(project: state.project.copyWith(name: newName.trim()));
+  }
+
   // ─── Project ──────────────────────────────────────────────────────────────
 
   void startNewProject(String name, {
@@ -225,6 +265,7 @@ class EditorNotifier extends Notifier<EditorState> {
   // ─── Tracks ───────────────────────────────────────────────────────────────
 
   void addTrack(TrackType type) {
+    _recordHistory();
     final ts = DateTime.now().millisecondsSinceEpoch;
     final count = state.project.tracks.where((t) => t.type == type).length + 1;
     final prefix = type.name[0].toUpperCase();
@@ -271,8 +312,8 @@ class EditorNotifier extends Notifier<EditorState> {
   }
 
   void removeTrack(String trackId) {
-    // Need at least 1 track
     if (state.project.tracks.length <= 1) return;
+    _recordHistory();
     final tracks = state.project.tracks.where((t) => t.id != trackId).toList();
     state = state.copyWith(
       project: state.project.copyWith(tracks: tracks, durationMs: _calcMax(tracks)),
@@ -301,11 +342,44 @@ class EditorNotifier extends Notifier<EditorState> {
   // ─── Media ────────────────────────────────────────────────────────────────
 
   void addMediaClip(PickedMediaResult media, {String? targetTrackId}) {
+    _recordHistory();
     final tracks = List<TrackItem>.from(state.project.tracks);
     String trackId;
+    double insertMs = state.currentTimeMs;
 
     if (targetTrackId != null && tracks.any((t) => t.id == targetTrackId)) {
       trackId = targetTrackId;
+    } else if (media.type == TrackType.audio || media.type == TrackType.voiceover) {
+      // Find candidate unlocked audio tracks
+      final candidateTracks = tracks.where((t) => t.type == media.type && !t.isLocked).toList();
+      TrackItem? freeTrack;
+      for (final t in candidateTracks) {
+        final overlaps = t.clips.any((c) =>
+            (insertMs >= c.startMs && insertMs < c.endMs) ||
+            (insertMs + 3000 > c.startMs && insertMs < c.startMs));
+        if (!overlaps) {
+          freeTrack = t;
+          break;
+        }
+      }
+
+      if (freeTrack != null) {
+        trackId = freeTrack.id;
+      } else {
+        // Create a new audio track placed directly BELOW the existing audio layers!
+        final ts2 = DateTime.now().millisecondsSinceEpoch;
+        final audioCount = tracks.where((t) => t.type == TrackType.audio).length + 1;
+        final newTrack = TrackItem(
+          id: 'track_audio_$ts2',
+          type: TrackType.audio,
+          name: 'A$audioCount',
+          clips: [],
+        );
+        final lastAudioIdx = tracks.lastIndexWhere((t) => t.type == TrackType.audio || t.type == TrackType.voiceover);
+        final insertIdx = lastAudioIdx == -1 ? tracks.length : lastAudioIdx + 1;
+        tracks.insert(insertIdx, newTrack);
+        trackId = newTrack.id;
+      }
     } else {
       // Find first compatible unlocked track
       final compat = tracks.firstWhere(
@@ -313,7 +387,6 @@ class EditorNotifier extends Notifier<EditorState> {
         orElse: () => const TrackItem(id: '', type: TrackType.video, name: ''),
       );
       if (compat.id.isEmpty) {
-        // Create a new track
         final ts2 = DateTime.now().millisecondsSinceEpoch;
         final cnt = tracks.where((t) => t.type == media.type).length + 1;
         final pfx = media.type.name[0].toUpperCase();
@@ -323,17 +396,23 @@ class EditorNotifier extends Notifier<EditorState> {
           name: '$pfx$cnt',
           clips: [],
         );
-        tracks.add(newT);
+        final firstAudio = tracks.indexWhere((t) => t.type == TrackType.audio || t.type == TrackType.voiceover);
+        final idx = firstAudio == -1 ? tracks.length : firstAudio;
+        tracks.insert(idx, newT);
         trackId = newT.id;
       } else {
         trackId = compat.id;
       }
-    }
 
-    final track = tracks.firstWhere((t) => t.id == trackId);
-    final insertMs = track.clips.isEmpty
-        ? 0.0
-        : track.clips.map((c) => c.endMs).reduce(math.max);
+      final track = tracks.firstWhere((t) => t.id == trackId);
+      if (track.clips.isEmpty) {
+        insertMs = 0.0;
+      } else if (state.currentTimeMs > 0) {
+        insertMs = state.currentTimeMs;
+      } else {
+        insertMs = track.clips.map((c) => c.endMs).reduce(math.max);
+      }
+    }
 
     final newClip = ClipItem(
       id: 'clip_${DateTime.now().millisecondsSinceEpoch}',
@@ -577,9 +656,45 @@ class EditorNotifier extends Notifier<EditorState> {
 
   // ─── Clip Ops ─────────────────────────────────────────────────────────────
 
+  void splitAtPlayhead() {
+    String? clipToSplit = state.selectedClipId;
+    if (clipToSplit == null) {
+      // Find clip intersecting playhead (prefer selected track, then any track)
+      if (state.selectedTrackId != null) {
+        final tr = state.project.tracks.firstWhere(
+          (t) => t.id == state.selectedTrackId,
+          orElse: () => const TrackItem(id: '', type: TrackType.video, name: ''),
+        );
+        for (final c in tr.clips) {
+          if (state.currentTimeMs >= c.startMs && state.currentTimeMs <= c.endMs) {
+            clipToSplit = c.id;
+            break;
+          }
+        }
+      }
+      if (clipToSplit == null) {
+        for (final track in state.project.tracks) {
+          for (final clip in track.clips) {
+            if (state.currentTimeMs >= clip.startMs && state.currentTimeMs <= clip.endMs) {
+              clipToSplit = clip.id;
+              break;
+            }
+          }
+          if (clipToSplit != null) break;
+        }
+      }
+    }
+
+    if (clipToSplit != null) {
+      state = state.copyWith(selectedClipId: clipToSplit);
+      splitSelectedClip();
+    }
+  }
+
   void splitSelectedClip() {
     final clipId = state.selectedClipId;
     if (clipId == null) return;
+    _recordHistory();
     final updatedTracks = state.project.tracks.map((track) {
       final idx = track.clips.indexWhere((c) => c.id == clipId);
       if (idx == -1) return track;
@@ -605,6 +720,7 @@ class EditorNotifier extends Notifier<EditorState> {
   void deleteSelectedClip() {
     final clipId = state.selectedClipId;
     if (clipId == null) return;
+    _recordHistory();
     final updatedTracks = state.project.tracks.map((t) {
       return t.copyWith(clips: t.clips.where((c) => c.id != clipId).toList());
     }).toList();

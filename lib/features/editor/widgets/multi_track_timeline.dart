@@ -8,11 +8,11 @@ import '../../../providers/editor_provider.dart';
 import 'clip_property_panel.dart';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const double _kTrackHeaderWidth = 58.0;
-const double _kTrackHeight = 44.0;
-const double _kAudioTrackHeight = 38.0;
-const double _kSmallTrackHeight = 36.0;
-const double _kRulerHeight = 22.0;
+const double _kTrackHeaderWidth = 54.0;
+const double _kTrackHeight = 48.0;
+const double _kAudioTrackHeight = 42.0;
+const double _kSmallTrackHeight = 38.0;
+const double _kRulerHeight = 26.0;
 const double _kBasePixelsPerSecond = 60.0;
 
 // ─── Main Timeline Widget ─────────────────────────────────────────────────────
@@ -65,6 +65,7 @@ class _MultiTrackTimelineState extends ConsumerState<MultiTrackTimeline> {
 
     // Seek to tapped position
     notifier.seekTo(timeMs);
+    HapticFeedback.selectionClick();
 
     // Hit test tracks and clips
     double currentY = _kRulerHeight;
@@ -108,11 +109,11 @@ class _MultiTrackTimelineState extends ConsumerState<MultiTrackTimeline> {
     final ed = ref.read(editorProvider);
 
     if (details.pointerCount > 1) {
-      // Two-finger pinch to zoom in/out!
+      // Two-finger pinch to zoom in/out
       final newScale = (_baseZoomScale * details.scale).clamp(0.2, 8.0);
       notifier.setZoomScale(newScale);
     } else {
-      // Single finger drag to scrub playhead!
+      // Single finger drag to scrub playhead
       _isScrubbing = true;
       final timeMs = (details.localFocalPoint.dx / _pixelsPerMs).clamp(0.0, ed.project.durationMs);
       notifier.seekTo(timeMs);
@@ -130,10 +131,10 @@ class _MultiTrackTimelineState extends ConsumerState<MultiTrackTimeline> {
     final visibleLeft = scrollOffset;
     final visibleRight = scrollOffset + viewportWidth;
 
-    // Auto-scroll to keep playhead in the right 1/3 of view when playing
-    if (playheadX > visibleRight - 40 || playheadX < visibleLeft) {
-      final target = (playheadX - viewportWidth * 0.3).clamp(0.0, _hScroll.position.maxScrollExtent);
-      _hScroll.animateTo(target, duration: const Duration(milliseconds: 150), curve: Curves.easeOut);
+    // Smooth auto-scroll during playback to keep needle within comfortable view
+    if (playheadX > visibleRight - 60 || playheadX < visibleLeft) {
+      final target = (playheadX - viewportWidth * 0.35).clamp(0.0, _hScroll.position.maxScrollExtent);
+      _hScroll.animateTo(target, duration: const Duration(milliseconds: 100), curve: Curves.linear);
     }
   }
 
@@ -144,7 +145,7 @@ class _MultiTrackTimelineState extends ConsumerState<MultiTrackTimeline> {
     final tracks = ed.project.tracks;
     final durationMs = math.max(ed.project.durationMs, 15000.0);
     final ppm = (_kBasePixelsPerSecond * ed.zoomScale) / 1000.0;
-    final totalW = durationMs * ppm + 120;
+    final totalW = durationMs * ppm + 160;
 
     // Auto-scroll during playback
     if (ed.isPlaying) {
@@ -157,20 +158,22 @@ class _MultiTrackTimelineState extends ConsumerState<MultiTrackTimeline> {
 
     return Column(
       children: [
-        // ── Timeline toolbar ───────────────────────────────────────────────
+        // ── 1. Timeline Top Toolbar (Matching Reference Image 1 & 2) ──────
         _TimelineToolbar(notifier: notifier, editorState: ed),
 
-        // ── Main timeline body ─────────────────────────────────────────────
+        // ── 2. Main Timeline Body ─────────────────────────────────────────
         Expanded(
           child: Row(
             children: [
-              // Left: Track headers (fixed, non-scrolling)
+              // Left: Track Headers (Fixed Column)
               SizedBox(
                 width: _kTrackHeaderWidth,
                 child: Column(
                   children: [
-                    // Ruler spacer
-                    const SizedBox(height: _kRulerHeight),
+                    // Ruler header corner: Quick + Track button
+                    _AddTrackCornerButton(
+                      onTap: () => notifier.toggleAddTrackSheet(),
+                    ),
                     // Track headers list (synced vertical scroll)
                     Expanded(
                       child: SingleChildScrollView(
@@ -193,27 +196,25 @@ class _MultiTrackTimelineState extends ConsumerState<MultiTrackTimeline> {
                         ),
                       ),
                     ),
-                    // Add Track button
-                    _AddTrackButton(onTap: () => notifier.toggleAddTrackSheet()),
                   ],
                 ),
               ),
 
-              // Right: Scrollable timeline content
+              // Right: Horizontally Scrollable Tracks with In-Sync Needle
               Expanded(
                 child: LayoutBuilder(
                   builder: (ctx, constraints) {
                     final viewW = constraints.maxWidth;
-                    return Stack(
-                      children: [
-                        // Scrollable content
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          controller: _hScroll,
-                          physics: const BouncingScrollPhysics(),
-                          child: SizedBox(
-                            width: totalW,
-                            child: SingleChildScrollView(
+                    return SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      controller: _hScroll,
+                      physics: const BouncingScrollPhysics(),
+                      child: SizedBox(
+                        width: totalW,
+                        child: Stack(
+                          children: [
+                            // 2.1 Tracks & Ruler Content
+                            SingleChildScrollView(
                               scrollDirection: Axis.vertical,
                               controller: _vScroll,
                               physics: const BouncingScrollPhysics(),
@@ -223,14 +224,16 @@ class _MultiTrackTimelineState extends ConsumerState<MultiTrackTimeline> {
                                 onScaleUpdate: _onScaleUpdate,
                                 onScaleEnd: _onScaleEnd,
                                 child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    // Ruler
+                                    // Ruler (Markings: 0s · · 8s · · 16s · ·)
                                     _TimelineRuler(
                                       totalW: totalW,
                                       durationMs: durationMs,
                                       ppm: ppm,
+                                      onSeek: (ms) => notifier.seekTo(ms),
                                     ),
-                                    // Track clip rows
+                                    // Track Clip Rows
                                     ...tracks.map((track) {
                                       return _TrackClipRow(
                                         key: ValueKey('clips_${track.id}'),
@@ -242,22 +245,27 @@ class _MultiTrackTimelineState extends ConsumerState<MultiTrackTimeline> {
                                         onAddMedia: () => notifier.toggleMediaBrowser(),
                                       );
                                     }),
-                                    const SizedBox(height: 8),
+                                    const SizedBox(height: 16),
                                   ],
                                 ),
                               ),
                             ),
-                          ),
-                        ),
 
-                        // Playhead needle overlay (moves with currentTime)
-                        _PlayheadNeedle(
-                          currentTimeMs: ed.currentTimeMs,
-                          ppm: ppm,
-                          scrollOffset: _hScroll.hasClients ? _hScroll.offset : 0,
-                          viewportWidth: viewW,
+                            // 2.2 Playhead Needle (100% In-Sync, Never Jumps or Drifts)
+                            Positioned(
+                              left: (ed.currentTimeMs * ppm) - 24,
+                              top: 0,
+                              bottom: 0,
+                              width: 48,
+                              child: _InteractivePlayheadNeedle(
+                                currentTimeMs: ed.currentTimeMs,
+                                ppm: ppm,
+                                onSeek: (ms) => notifier.seekTo(ms),
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     );
                   },
                 ),
@@ -266,7 +274,7 @@ class _MultiTrackTimelineState extends ConsumerState<MultiTrackTimeline> {
           ),
         ),
 
-        // ── Clip property panel (shows when a clip is selected) ─────────────
+        // ── 3. Clip Property Panel (Shows when a clip is selected) ─────────
         if (ed.selectedClip != null)
           ClipPropertyPanel(
             clip: ed.selectedClip!,
@@ -292,60 +300,149 @@ class _MultiTrackTimelineState extends ConsumerState<MultiTrackTimeline> {
   }
 }
 
-// ─── Timeline Toolbar ─────────────────────────────────────────────────────────
+// ─── Timeline Toolbar (Matching Reference Image 1 & 2) ────────────────────────
 class _TimelineToolbar extends StatelessWidget {
   final EditorNotifier notifier;
   final EditorState editorState;
 
   const _TimelineToolbar({required this.notifier, required this.editorState});
 
+  String _formatTime(double timeMs) {
+    final totalSeconds = timeMs / 1000.0;
+    final seconds = totalSeconds.toInt();
+    final tenths = ((totalSeconds - seconds) * 10).toInt();
+    return '${seconds}s';
+  }
+
+  String _formatDetailed(double timeMs) {
+    final totalSeconds = timeMs / 1000.0;
+    final seconds = totalSeconds.toInt();
+    final tenths = ((totalSeconds - seconds) * 100).toInt();
+    return '$seconds.${tenths.toString().padLeft(2, '0')}s';
+  }
+
   @override
   Widget build(BuildContext context) {
     final zoom = editorState.zoomScale;
     final pct = (zoom * 100).round();
+    final currentStr = _formatDetailed(editorState.currentTimeMs);
+    final totalStr = _formatDetailed(editorState.project.durationMs > 0 ? editorState.project.durationMs : 15000.0);
 
     return Container(
-      height: 32,
-      color: const Color(0xFF0E1118),
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      height: 38,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: const BoxDecoration(
+        color: Color(0xFF0C0E14),
+        border: Border(
+          bottom: BorderSide(color: Color(0xFF1E2536), width: 1),
+        ),
+      ),
       child: Row(
         children: [
-          const Icon(Icons.layers_outlined, size: 14, color: Video365Colors.secondaryText),
-          const SizedBox(width: 6),
-          Text(
-            'TIMELINE',
-            style: const TextStyle(
-              color: Video365Colors.secondaryText,
-              fontSize: 10,
+          // Left: "Timeline  4.93s / 29.04s" (Matching Reference Image 1)
+          const Text(
+            'Timeline',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 12,
               fontWeight: FontWeight.w700,
-              letterSpacing: 1.0,
+              letterSpacing: 0.2,
             ),
           ),
-          const Spacer(),
-          // Zoom controls
-          _IconBtn(icon: Icons.remove, tooltip: 'Zoom Out', onTap: notifier.zoomOut),
-          const SizedBox(width: 2),
+          const SizedBox(width: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
-              color: const Color(0xFF1A2030),
-              borderRadius: BorderRadius.circular(4),
+              color: const Color(0xFF141923),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: const Color(0xFF222B3D), width: 0.8),
             ),
             child: Text(
-              '$pct%',
+              '$currentStr / $totalStr',
               style: const TextStyle(
-                color: Video365Colors.primaryText,
+                color: Color(0xFF94A3B8),
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
                 fontFamily: 'monospace',
               ),
             ),
           ),
-          const SizedBox(width: 2),
-          _IconBtn(icon: Icons.add, tooltip: 'Zoom In', onTap: notifier.zoomIn),
-          const SizedBox(width: 8),
-          _IconBtn(icon: Icons.fit_screen_outlined, tooltip: 'Fit to Window',
-            onTap: () => notifier.setZoomScale(1.0)),
+
+          const Spacer(),
+
+          // Center: Zoom Controls [- 80% +] (Matching Reference Image 2)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _IconBtn(
+                icon: Icons.remove_rounded,
+                tooltip: 'Zoom Out',
+                onTap: () {
+                  notifier.zoomOut();
+                  HapticFeedback.selectionClick();
+                },
+              ),
+              const SizedBox(width: 2),
+              GestureDetector(
+                onTap: () {
+                  notifier.setZoomScale(1.0);
+                  HapticFeedback.selectionClick();
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF19202E),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    '$pct%',
+                    style: const TextStyle(
+                      color: Video365Colors.primaryText,
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 2),
+              _IconBtn(
+                icon: Icons.add_rounded,
+                tooltip: 'Zoom In',
+                onTap: () {
+                  notifier.zoomIn();
+                  HapticFeedback.selectionClick();
+                },
+              ),
+            ],
+          ),
+
+          const SizedBox(width: 10),
+
+          // Right: Undo ↺ & Redo ↻ Buttons (Matching Reference Image 1)
+          _IconBtn(
+            icon: Icons.undo_rounded,
+            tooltip: 'Undo',
+            color: notifier.canUndo ? Colors.white : const Color(0xFF475569),
+            onTap: () {
+              if (notifier.canUndo) {
+                notifier.undo();
+                HapticFeedback.lightImpact();
+              }
+            },
+          ),
+          const SizedBox(width: 4),
+          _IconBtn(
+            icon: Icons.redo_rounded,
+            tooltip: 'Redo',
+            color: notifier.canRedo ? Colors.white : const Color(0xFF475569),
+            onTap: () {
+              if (notifier.canRedo) {
+                notifier.redo();
+                HapticFeedback.lightImpact();
+              }
+            },
+          ),
         ],
       ),
     );
@@ -356,8 +453,9 @@ class _IconBtn extends StatelessWidget {
   final IconData icon;
   final String tooltip;
   final VoidCallback onTap;
+  final Color? color;
 
-  const _IconBtn({required this.icon, required this.tooltip, required this.onTap});
+  const _IconBtn({required this.icon, required this.tooltip, required this.onTap, this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -365,11 +463,58 @@ class _IconBtn extends StatelessWidget {
       message: tooltip,
       child: GestureDetector(
         onTap: onTap,
+        behavior: HitTestBehavior.opaque,
         child: Container(
-          width: 24,
-          height: 24,
+          width: 26,
+          height: 26,
           alignment: Alignment.center,
-          child: Icon(icon, size: 14, color: Video365Colors.secondaryText),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(6),
+            color: Colors.white.withValues(alpha: 0.04),
+          ),
+          child: Icon(icon, size: 15, color: color ?? const Color(0xFFCBD5E1)),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Ruler Corner Button (+ Track) ────────────────────────────────────────────
+class _AddTrackCornerButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _AddTrackCornerButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: _kTrackHeaderWidth,
+        height: _kRulerHeight,
+        decoration: const BoxDecoration(
+          color: Color(0xFF090C12),
+          border: Border(
+            bottom: BorderSide(color: Color(0xFF1E2536), width: 1),
+            right: BorderSide(color: Color(0xFF1E2536), width: 1),
+          ),
+        ),
+        alignment: Alignment.center,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: const [
+            Icon(Icons.add_rounded, size: 14, color: Video365Colors.activeGreen),
+            SizedBox(width: 2),
+            Text(
+              'Track',
+              style: TextStyle(
+                color: Video365Colors.activeGreen,
+                fontSize: 8.5,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -381,17 +526,41 @@ class _TimelineRuler extends StatelessWidget {
   final double totalW;
   final double durationMs;
   final double ppm;
+  final void Function(double) onSeek;
 
-  const _TimelineRuler({required this.totalW, required this.durationMs, required this.ppm});
+  const _TimelineRuler({
+    required this.totalW,
+    required this.durationMs,
+    required this.ppm,
+    required this.onSeek,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: _kRulerHeight,
-      width: totalW,
-      color: const Color(0xFF0A0D14),
-      child: CustomPaint(
-        painter: _RulerPainter(durationMs: durationMs, ppm: ppm),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (details) {
+        final timeMs = (details.localPosition.dx / ppm).clamp(0.0, durationMs);
+        onSeek(timeMs);
+        HapticFeedback.selectionClick();
+      },
+      onHorizontalDragStart: (details) {
+        final timeMs = (details.localPosition.dx / ppm).clamp(0.0, durationMs);
+        onSeek(timeMs);
+        HapticFeedback.selectionClick();
+      },
+      onHorizontalDragUpdate: (details) {
+        final timeMs = (details.localPosition.dx / ppm).clamp(0.0, durationMs);
+        onSeek(timeMs);
+        HapticFeedback.selectionClick();
+      },
+      child: Container(
+        height: _kRulerHeight,
+        width: totalW,
+        color: const Color(0xFF0A0D14),
+        child: CustomPaint(
+          painter: _RulerPainter(durationMs: durationMs, ppm: ppm),
+        ),
       ),
     );
   }
@@ -405,37 +574,44 @@ class _RulerPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final minorPaint = Paint()..color = const Color(0xFF2A3448)..strokeWidth = 1;
-    final majorPaint = Paint()..color = const Color(0xFF4A5568)..strokeWidth = 1.2;
+    final minorPaint = Paint()..color = const Color(0xFF232D3F)..strokeWidth = 1;
+    final majorPaint = Paint()..color = const Color(0xFF475569)..strokeWidth = 1.2;
 
-    final totalSec = (durationMs / 1000).ceil() + 5;
+    final totalSec = (durationMs / 1000).ceil() + 10;
     final pixPerSec = ppm * 1000;
 
-    // Choose tick interval based on zoom
+    // Tick intervals matching Reference Image 1 (0s · · 8s · · 16s · · 24s)
     int majorInterval = 1;
-    if (pixPerSec < 20) majorInterval = 10;
-    else if (pixPerSec < 40) majorInterval = 5;
-    else if (pixPerSec < 80) majorInterval = 2;
+    if (pixPerSec < 15) majorInterval = 10;
+    else if (pixPerSec < 35) majorInterval = 8;
+    else if (pixPerSec < 60) majorInterval = 4;
+    else if (pixPerSec < 120) majorInterval = 2;
 
     for (int s = 0; s <= totalSec; s++) {
       final x = s * pixPerSec;
       final isMajor = s % majorInterval == 0;
 
       if (isMajor) {
-        canvas.drawLine(Offset(x, size.height - 12), Offset(x, size.height), majorPaint);
+        canvas.drawLine(Offset(x, size.height - 10), Offset(x, size.height), majorPaint);
         final m = s ~/ 60;
         final sec = s % 60;
-        final label = '${m > 0 ? '${m}m' : ''}${sec}s';
+        final label = '${m > 0 ? '${m}m ' : ''}${sec}s';
         final tp = TextPainter(
           text: TextSpan(
             text: label,
-            style: const TextStyle(color: Color(0xFF64748B), fontSize: 8.5, fontWeight: FontWeight.w600),
+            style: const TextStyle(
+              color: Color(0xFF64748B),
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+              fontFamily: 'monospace',
+            ),
           ),
           textDirection: TextDirection.ltr,
         )..layout();
-        tp.paint(canvas, Offset(x + 2, 2));
+        tp.paint(canvas, Offset(x + 3, 3));
       } else {
-        canvas.drawLine(Offset(x, size.height - 6), Offset(x, size.height), minorPaint);
+        // Minor dot or tick
+        canvas.drawLine(Offset(x, size.height - 5), Offset(x, size.height), minorPaint);
       }
     }
   }
@@ -444,7 +620,7 @@ class _RulerPainter extends CustomPainter {
   bool shouldRepaint(_RulerPainter old) => old.durationMs != durationMs || old.ppm != ppm;
 }
 
-// ─── Track Header ─────────────────────────────────────────────────────────────
+// ─── Track Header (Left Column) ───────────────────────────────────────────────
 class _TrackHeader extends StatelessWidget {
   final TrackItem track;
   final double height;
@@ -474,7 +650,6 @@ class _TrackHeader extends StatelessWidget {
       case TrackType.text: return const Color(0xFF7C3AED);
       case TrackType.effect: return const Color(0xFFF59E0B);
       case TrackType.adjustment: return const Color(0xFFDC2626);
-      default: return const Color(0xFF374151);
     }
   }
 
@@ -482,32 +657,34 @@ class _TrackHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
+      behavior: HitTestBehavior.opaque,
       child: Container(
         height: height,
         margin: const EdgeInsets.only(bottom: 2),
-        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
         decoration: BoxDecoration(
-          color: isSelected ? _trackColor.withValues(alpha: 0.18) : const Color(0xFF0D1117),
+          color: isSelected ? _trackColor.withValues(alpha: 0.22) : const Color(0xFF0D1117),
           border: Border(
-            right: BorderSide(color: _trackColor, width: 2.5),
+            right: BorderSide(color: _trackColor, width: 3.0),
             bottom: const BorderSide(color: Color(0xFF1A2030), width: 1),
           ),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            // Track Type Icon & Name
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(track.type.icon, size: 10, color: _trackColor),
-                const SizedBox(width: 3),
+                Icon(track.type.icon, size: 12, color: _trackColor),
+                const SizedBox(width: 4),
                 Flexible(
                   child: Text(
                     track.name,
                     style: TextStyle(
                       color: isSelected ? Colors.white : const Color(0xFF94A3B8),
-                      fontSize: 8.5,
-                      fontWeight: FontWeight.w700,
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w800,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -515,20 +692,27 @@ class _TrackHeader extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 1),
+            const SizedBox(height: 3),
+            // Track Quick Toggles: Mute & Lock
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _SmallIconBtn(
-                  icon: track.isMuted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
-                  color: track.isMuted ? const Color(0xFFEF5350) : const Color(0xFF475569),
+                GestureDetector(
                   onTap: onMute,
+                  child: Icon(
+                    track.isMuted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                    size: 11,
+                    color: track.isMuted ? const Color(0xFFEF4444) : const Color(0xFF475569),
+                  ),
                 ),
-                const SizedBox(width: 5),
-                _SmallIconBtn(
-                  icon: track.isLocked ? Icons.lock_rounded : Icons.lock_open_rounded,
-                  color: track.isLocked ? const Color(0xFFF59E0B) : const Color(0xFF475569),
+                const SizedBox(width: 6),
+                GestureDetector(
                   onTap: onLock,
+                  child: Icon(
+                    track.isLocked ? Icons.lock_rounded : Icons.lock_open_rounded,
+                    size: 11,
+                    color: track.isLocked ? const Color(0xFFF59E0B) : const Color(0xFF475569),
+                  ),
                 ),
               ],
             ),
@@ -539,57 +723,7 @@ class _TrackHeader extends StatelessWidget {
   }
 }
 
-class _SmallIconBtn extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _SmallIconBtn({required this.icon, required this.color, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Icon(icon, size: 9, color: color),
-    );
-  }
-}
-
-// ─── Add Track Button ─────────────────────────────────────────────────────────
-class _AddTrackButton extends StatelessWidget {
-  final VoidCallback onTap;
-
-  const _AddTrackButton({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: _kTrackHeaderWidth,
-        height: 36,
-        color: const Color(0xFF0A0D14),
-        child: const Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.add_circle_outline, size: 14, color: Video365Colors.activeGreen),
-            SizedBox(height: 2),
-            Text(
-              'Track',
-              style: TextStyle(
-                color: Video365Colors.activeGreen,
-                fontSize: 7,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Clip Row ─────────────────────────────────────────────────────────────────
+// ─── Track Clip Row ───────────────────────────────────────────────────────────
 class _TrackClipRow extends StatelessWidget {
   final TrackItem track;
   final EditorState editorState;
@@ -639,32 +773,31 @@ class _TrackClipRow extends StatelessWidget {
               ? _EmptyTrackHint(track: track, onAddMedia: onAddMedia)
               : Stack(
                   clipBehavior: Clip.none,
-                  children: track.clips.map((clip) {
-                    final left = clip.startMs * ppm;
-                    final width = math.max(clip.durationMs * ppm, 24.0);
-                    final isSelected = editorState.selectedClipId == clip.id;
-                    final notifier = editorState.project.tracks.isNotEmpty
-                        ? (clip) // reference
-                        : null;
+                  children: [
+                    ...track.clips.map((clip) {
+                      final left = clip.startMs * ppm;
+                      final width = math.max(clip.durationMs * ppm, 28.0);
+                      final isSelected = editorState.selectedClipId == clip.id;
 
-                    return Positioned(
-                      left: left,
-                      top: 2,
-                      bottom: 2,
-                      width: width,
-                      child: GestureDetector(
-                        onTap: () => onClipTap(clip.id),
-                        child: _ClipBlock(
-                          clip: clip,
-                          width: width,
-                          height: _height - 4,
-                          isSelected: isSelected,
-                          trackType: track.type,
-                          ppm: ppm,
+                      return Positioned(
+                        left: left,
+                        top: 2,
+                        bottom: 2,
+                        width: width,
+                        child: GestureDetector(
+                          onTap: () => onClipTap(clip.id),
+                          child: _ClipBlock(
+                            clip: clip,
+                            width: width,
+                            height: _height - 4,
+                            isSelected: isSelected,
+                            trackType: track.type,
+                            ppm: ppm,
+                          ),
                         ),
-                      ),
-                    );
-                  }).toList(),
+                      );
+                    }),
+                  ],
                 ),
     );
   }
@@ -679,30 +812,27 @@ class _EmptyTrackHint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isMedia = track.type == TrackType.video ||
-        track.type == TrackType.audio ||
-        track.type == TrackType.image;
-
     return GestureDetector(
-      onTap: isMedia ? onAddMedia : null,
+      onTap: onAddMedia,
+      behavior: HitTestBehavior.opaque,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12),
         alignment: Alignment.centerLeft,
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              isMedia ? Icons.add_circle_outline : Icons.info_outline,
-              size: 12,
-              color: isMedia ? Video365Colors.activeGreen : const Color(0xFF374151),
+            const Icon(
+              Icons.add_circle_outline_rounded,
+              size: 13,
+              color: Video365Colors.activeGreen,
             ),
             const SizedBox(width: 6),
             Text(
-              isMedia ? 'Add ${track.type.label}' : 'Empty track',
-              style: TextStyle(
-                color: isMedia ? Video365Colors.activeGreen : const Color(0xFF374151),
+              'Add ${track.type.label}',
+              style: const TextStyle(
+                color: Color(0xFF64748B),
                 fontSize: 10,
-                fontWeight: isMedia ? FontWeight.w600 : FontWeight.w400,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ],
@@ -712,7 +842,7 @@ class _EmptyTrackHint extends StatelessWidget {
   }
 }
 
-// ─── Clip Block ───────────────────────────────────────────────────────────────
+// ─── Clip Block (Matching Reference Images 1, 2 & 5) ──────────────────────────
 class _ClipBlock extends ConsumerWidget {
   final ClipItem clip;
   final double width;
@@ -730,54 +860,79 @@ class _ClipBlock extends ConsumerWidget {
     required this.ppm,
   });
 
+  String _formatDuration(double durationMs) {
+    final s = (durationMs / 1000).round();
+    return '${s}s';
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final notifier = ref.read(editorProvider.notifier);
     final isAudio = trackType == TrackType.audio || trackType == TrackType.voiceover;
     final isVideo = trackType == TrackType.video || trackType == TrackType.image;
+    final isText = trackType == TrackType.text;
+    final isEffect = trackType == TrackType.effect || trackType == TrackType.adjustment;
+
+    Color baseColor;
+    if (isVideo) baseColor = const Color(0xFF1E3A8A); // Deep Blue
+    else if (isAudio) baseColor = const Color(0xFF4338CA); // Indigo
+    else if (isText) baseColor = const Color(0xFF6D28D9); // Violet
+    else baseColor = const Color(0xFFD97706); // Warm Amber
 
     return Container(
       width: width,
       decoration: BoxDecoration(
-        color: clip.color.withValues(alpha: 0.85),
-        borderRadius: BorderRadius.circular(6),
+        color: baseColor,
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: isSelected ? Colors.white : clip.color,
-          width: isSelected ? 2.0 : 0.8,
+          color: isSelected ? Colors.white : baseColor.withValues(alpha: 0.6),
+          width: isSelected ? 2.0 : 1.0,
         ),
         boxShadow: isSelected
-            ? [BoxShadow(color: clip.color.withValues(alpha: 0.5), blurRadius: 8)]
+            ? [
+                BoxShadow(
+                  color: Colors.white.withValues(alpha: 0.35),
+                  blurRadius: 8,
+                ),
+              ]
             : null,
       ),
       clipBehavior: Clip.antiAlias,
       child: Stack(
         children: [
-          // Audio waveform background
+          // Audio waveform visualization
           if (isAudio)
             Positioned.fill(
               child: CustomPaint(
-                painter: _WaveformPainter(color: Colors.white.withValues(alpha: 0.40)),
+                painter: _WaveformPainter(color: Colors.white.withValues(alpha: 0.45)),
               ),
             ),
 
-          // Video filmstrip overlay
-          if (isVideo && width > 30)
+          // Video filmstrip thumbnails overlay
+          if (isVideo && width > 40)
             Positioned.fill(
-              child: Row(
-                children: List.generate(
-                  math.max(1, (width / 32).floor()),
-                  (i) => Container(
-                    width: 32,
-                    decoration: BoxDecoration(
-                      border: Border(
-                        right: BorderSide(color: Colors.black.withValues(alpha: 0.3), width: 0.5),
-                      ),
-                    ),
-                    child: Center(
-                      child: Icon(
-                        Icons.image_outlined,
-                        size: 10,
-                        color: Colors.white.withValues(alpha: 0.25),
+              child: ClipRect(
+                child: OverflowBox(
+                  alignment: Alignment.centerLeft,
+                  maxWidth: double.infinity,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: List.generate(
+                      math.max(1, (width / 36).ceil()),
+                      (i) => Container(
+                        width: 36,
+                        decoration: BoxDecoration(
+                          border: Border(
+                            right: BorderSide(color: Colors.black.withValues(alpha: 0.3), width: 0.8),
+                          ),
+                        ),
+                        child: Center(
+                          child: Icon(
+                            Icons.image_outlined,
+                            size: 12,
+                            color: Colors.white.withValues(alpha: 0.3),
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -785,193 +940,232 @@ class _ClipBlock extends ConsumerWidget {
               ),
             ),
 
-          // Clip title
-          if (width > 28)
-            Positioned(
-              left: isSelected ? 14 : 6,
-              top: 0,
-              bottom: 0,
-              right: isSelected ? 14 : 6,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  clip.title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w700,
-                    shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
+          // Clip Content Info
+          Positioned(
+            left: isSelected ? 18 : 8,
+            top: 0,
+            bottom: 0,
+            right: isSelected ? 18 : 8,
+            child: Row(
+              children: [
+                // Duration Badge: "14 Sec" (Matching Reference Image 5)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(4),
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  child: Text(
+                    _formatDuration(clip.durationMs),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 8,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ),
-              ),
-            ),
-
-          // Clip Body Gesture Handler (Drag to Move along timeline & Long Press)
-          Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onTap: () => notifier.selectClip(clip.id),
-              onDoubleTap: () => notifier.selectClip(clip.id),
-              onLongPress: () {
-                HapticFeedback.heavyImpact();
-                notifier.selectClip(clip.id);
-                notifier.setBottomTool(BottomTool.trim);
-              },
-              onHorizontalDragUpdate: isSelected
-                  ? (details) {
-                      final deltaMs = details.delta.dx / ppm;
-                      notifier.moveClip(clip.id, clip.startMs + deltaMs);
-                    }
-                  : null,
+                const SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    clip.textContent ?? clip.title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.2,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
           ),
 
-          // Selection Left Trim Handle (Drag to Trim Start)
+          // Selected Handles: Left White Grab Handle (<)
           if (isSelected)
             Positioned(
               left: 0,
               top: 0,
               bottom: 0,
-              width: 14,
+              width: 16,
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onHorizontalDragUpdate: (details) {
-                  final deltaMs = details.delta.dx / ppm;
+                  final deltaMs = details.primaryDelta! / ppm;
                   notifier.trimClipStart(clip.id, clip.startMs + deltaMs);
                 },
                 child: Container(
-                  color: Colors.white,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(6),
+                      bottomLeft: Radius.circular(6),
+                    ),
+                  ),
                   child: const Center(
-                    child: Icon(Icons.drag_indicator_rounded, size: 10, color: Colors.black),
+                    child: Icon(Icons.chevron_left_rounded, size: 14, color: Colors.black),
                   ),
                 ),
               ),
             ),
 
-          // Selection Right Trim Handle (Drag to Trim End)
+          // Selected Handles: Right White Grab Handle (>)
           if (isSelected)
             Positioned(
               right: 0,
               top: 0,
               bottom: 0,
-              width: 14,
+              width: 16,
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onHorizontalDragUpdate: (details) {
-                  final deltaMs = details.delta.dx / ppm;
+                  final deltaMs = details.primaryDelta! / ppm;
                   notifier.trimClipEnd(clip.id, clip.endMs + deltaMs);
                 },
                 child: Container(
-                  color: Colors.white,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.only(
+                      topRight: Radius.circular(6),
+                      bottomRight: Radius.circular(6),
+                    ),
+                  ),
                   child: const Center(
-                    child: Icon(Icons.drag_indicator_rounded, size: 10, color: Colors.black),
+                    child: Icon(Icons.chevron_right_rounded, size: 14, color: Colors.black),
                   ),
                 ),
               ),
             ),
+
+          // Horizontal Drag to Move Clip Body
+          Positioned(
+            left: isSelected ? 16 : 0,
+            right: isSelected ? 16 : 0,
+            top: 0,
+            bottom: 0,
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onHorizontalDragUpdate: (details) {
+                final deltaMs = details.primaryDelta! / ppm;
+                notifier.moveClip(clip.id, clip.startMs + deltaMs);
+              },
+              onLongPress: () {
+                HapticFeedback.heavyImpact();
+                notifier.selectClip(clip.id, trackId: clip.trackId);
+                notifier.setBottomTool(BottomTool.trim);
+              },
+              onDoubleTap: () {
+                notifier.selectClip(clip.id, trackId: clip.trackId);
+              },
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-// ─── Playhead Needle ──────────────────────────────────────────────────────────
-class _PlayheadNeedle extends StatefulWidget {
+// ─── Interactive Playhead Needle (100% In-Sync, Matching Ref Images 1, 5 & 8) ─
+class _InteractivePlayheadNeedle extends StatelessWidget {
   final double currentTimeMs;
   final double ppm;
-  final double scrollOffset;
-  final double viewportWidth;
+  final void Function(double) onSeek;
 
-  const _PlayheadNeedle({
+  const _InteractivePlayheadNeedle({
     required this.currentTimeMs,
     required this.ppm,
-    required this.scrollOffset,
-    required this.viewportWidth,
+    required this.onSeek,
   });
 
-  @override
-  State<_PlayheadNeedle> createState() => _PlayheadNeedleState();
-}
+  String _formatTimePill(double ms) {
+    final totalSec = ms / 1000.0;
+    final s = totalSec.toInt();
+    final tenths = ((totalSec - s) * 10).toInt();
+    return '$s.${tenths}s';
+  }
 
-class _PlayheadNeedleState extends State<_PlayheadNeedle> {
   @override
   Widget build(BuildContext context) {
-    // Calculate screen X of playhead (accounting for horizontal scroll)
-    final playheadAbsoluteX = widget.currentTimeMs * widget.ppm;
-    final playheadScreenX = playheadAbsoluteX - widget.scrollOffset;
+    final pillLabel = _formatTimePill(currentTimeMs);
 
-    // Only paint if visible
-    if (playheadScreenX < -4 || playheadScreenX > widget.viewportWidth + 4) {
-      return const SizedBox();
-    }
-
-    final totalSec = widget.currentTimeMs / 1000;
-    final m = totalSec ~/ 60;
-    final s = totalSec.toInt() % 60;
-    final ms = ((totalSec - totalSec.floor()) * 10).toInt();
-    final label = '${m > 0 ? '$m:' : ''}${s.toString().padLeft(2, '0')}.$ms';
-
-    return Positioned(
-      left: playheadScreenX - 1,
-      top: 0,
-      bottom: 0,
-      child: IgnorePointer(
-        child: SizedBox(
-          width: 2,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              // Needle line
-              Positioned(
-                top: _kRulerHeight - 4,
-                bottom: 0,
-                left: 0,
-                child: Container(
-                  width: 2,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFEF4444),
-                    boxShadow: [BoxShadow(color: Color(0x88EF4444), blurRadius: 6)],
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onHorizontalDragStart: (_) => HapticFeedback.selectionClick(),
+      onHorizontalDragUpdate: (details) {
+        final deltaMs = details.primaryDelta! / ppm;
+        onSeek(math.max(0.0, currentTimeMs + deltaMs));
+        HapticFeedback.selectionClick();
+      },
+      child: Stack(
+        alignment: Alignment.topCenter,
+        clipBehavior: Clip.none,
+        children: [
+          // 1. Vertical White Needle Line
+          Positioned(
+            top: _kRulerHeight - 4,
+            bottom: 0,
+            left: 23,
+            child: Container(
+              width: 2.0,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Color(0xAAFFFFFF),
+                    blurRadius: 4,
+                    spreadRadius: 0.5,
                   ),
-                ),
+                ],
               ),
-              // Timecode pill at top
-              Positioned(
-                top: 2,
-                left: -22,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEF4444),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    label,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 8.5,
-                      fontWeight: FontWeight.w800,
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                ),
-              ),
-              // Triangle top cap
-              Positioned(
-                top: _kRulerHeight - 6,
-                left: -4,
-                child: const Icon(Icons.arrow_drop_down, size: 10, color: Color(0xFFEF4444)),
-              ),
-            ],
+            ),
           ),
-        ),
+
+          // 2. White Time Capsule Pill at Top (Matching Reference Image 1 & 8)
+          Positioned(
+            top: 1,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black87,
+                    blurRadius: 6,
+                    offset: Offset(0, 1),
+                  ),
+                ],
+              ),
+              child: Text(
+                pillLabel,
+                style: const TextStyle(
+                  color: Color(0xFF080A0E),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ),
+          ),
+
+          // 3. Pointer Triangle under Pill
+          Positioned(
+            top: _kRulerHeight - 6,
+            left: 18,
+            child: const Icon(
+              Icons.arrow_drop_down,
+              size: 14,
+              color: Colors.white,
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-// ─── Waveform Painter ─────────────────────────────────────────────────────────
+// ─── Audio Waveform Canvas Painter ────────────────────────────────────────────
 class _WaveformPainter extends CustomPainter {
   final Color color;
   _WaveformPainter({required this.color});
@@ -986,7 +1180,7 @@ class _WaveformPainter extends CustomPainter {
     final step = size.width / math.max(1, size.width / 3).floor();
     int i = 0;
     for (double x = 0; x < size.width; x += step, i++) {
-      final ratio = (math.sin(i * 0.6) * 0.4 + math.cos(i * 1.1) * 0.3).abs() + 0.1;
+      final ratio = (math.sin(i * 0.6) * 0.4 + math.cos(i * 1.1) * 0.3).abs() + 0.12;
       final half = (size.height * 0.75) * ratio / 2;
       canvas.drawLine(Offset(x, center - half), Offset(x, center + half), paint);
     }

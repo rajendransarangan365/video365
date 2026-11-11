@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
 import '../../../core/theme/video365_colors.dart';
@@ -19,10 +20,52 @@ class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
   String? _currentLoadedSource;
   bool _isInitialized = false;
 
+  VideoPlayerController? _audioController;
+  String? _currentAudioSource;
+  bool _isAudioInitialized = false;
+
   @override
   void dispose() {
     _controller?.dispose();
+    _audioController?.dispose();
     super.dispose();
+  }
+
+  Future<void> _updateAudioPlayerSource(ClipItem? clip) async {
+    if (clip == null) {
+      if (_audioController != null) {
+        await _audioController!.pause();
+        await _audioController!.dispose();
+        _audioController = null;
+        _currentAudioSource = null;
+        if (mounted) setState(() => _isAudioInitialized = false);
+      }
+      return;
+    }
+
+    final targetSource = clip.filePath ?? clip.assetPath ?? '';
+    if (targetSource.isEmpty) return;
+    if (targetSource == _currentAudioSource && _audioController != null) return;
+
+    try {
+      await _audioController?.dispose();
+      _audioController = null;
+
+      if (clip.filePath != null) {
+        _audioController = VideoPlayerController.file(File(clip.filePath!));
+      } else if (clip.assetPath != null) {
+        _audioController = VideoPlayerController.asset(clip.assetPath!);
+      }
+
+      if (_audioController != null) {
+        await _audioController!.initialize();
+        _audioController!.setLooping(false);
+        _currentAudioSource = targetSource;
+        if (mounted) setState(() => _isAudioInitialized = true);
+      }
+    } catch (e) {
+      debugPrint('VideoPreviewCard audio controller error: $e');
+    }
   }
 
   Future<void> _updatePlayerSource(ClipItem? clip) async {
@@ -161,6 +204,42 @@ class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
       }
     }
 
+    // Find active audio clip across all unmuted audio & voiceover tracks
+    ClipItem? activeAudioClip;
+    for (final track in editorState.project.tracks) {
+      if (track.isHidden || track.isMuted) continue;
+      if (track.type == TrackType.audio || track.type == TrackType.voiceover) {
+        for (final clip in track.clips) {
+          if (currentTime >= clip.startMs && currentTime <= clip.endMs) {
+            activeAudioClip = clip;
+            break;
+          }
+        }
+        if (activeAudioClip != null) break;
+      }
+    }
+
+    // Sync audio player source
+    if (activeAudioClip != null && activeAudioClip.id.isNotEmpty) {
+      _updateAudioPlayerSource(activeAudioClip);
+    } else {
+      _updateAudioPlayerSource(null);
+    }
+
+    // Sync audio playback state & volume
+    if (_isAudioInitialized && _audioController != null && activeAudioClip != null) {
+      final targetVolume = editorState.isAudioMuted ? 0.0 : activeAudioClip.volume;
+      _audioController!.setVolume(targetVolume);
+
+      if (editorState.isPlaying && !_audioController!.value.isPlaying) {
+        final seekPosMs = (currentTime - activeAudioClip.startMs + activeAudioClip.sourceInMs).clamp(0.0, activeAudioClip.durationMs);
+        _audioController!.seekTo(Duration(milliseconds: seekPosMs.toInt()));
+        _audioController!.play();
+      } else if (!editorState.isPlaying && _audioController!.value.isPlaying) {
+        _audioController!.pause();
+      }
+    }
+
     // Find active motion graphics / text clip across all text tracks
     ClipItem? activeTextClip;
     for (final track in editorState.project.tracks) {
@@ -236,61 +315,168 @@ class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
                 if (activeTextClip != null && activeTextClip.id.isNotEmpty && activeTextClip.textContent != null)
                   _buildMotionGraphicsOverlay(activeTextClip),
 
-                // 3. Bottom-Left Aspect Ratio Badge (NO EMOJIS!)
+                // 3. Floating Playback Controls Bar (Matching Reference Image 1 & 5)
                 Positioned(
                   left: 12,
-                  bottom: 12,
+                  right: 12,
+                  bottom: 10,
+                  child: Container(
+                    height: 44,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.65),
+                      borderRadius: BorderRadius.circular(22),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 1),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.4),
+                          blurRadius: 10,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        // Left: Audio Volume Toggle
+                        GestureDetector(
+                          onTap: () {
+                            editorNotifier.toggleMute();
+                            HapticFeedback.selectionClick();
+                          },
+                          behavior: HitTestBehavior.opaque,
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: editorState.isAudioMuted
+                                  ? const Color(0xFFEF4444).withValues(alpha: 0.25)
+                                  : Colors.white.withValues(alpha: 0.08),
+                            ),
+                            alignment: Alignment.center,
+                            child: Icon(
+                              editorState.isAudioMuted
+                                  ? Icons.volume_off_rounded
+                                  : Icons.volume_up_rounded,
+                              size: 18,
+                              color: editorState.isAudioMuted
+                                  ? const Color(0xFFEF4444)
+                                  : Colors.white,
+                            ),
+                          ),
+                        ),
+
+                        // Center: Primary Play / Pause Button with Emerald Glow
+                        GestureDetector(
+                          onTap: () {
+                            editorNotifier.togglePlay();
+                            HapticFeedback.lightImpact();
+                          },
+                          behavior: HitTestBehavior.opaque,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: editorState.isPlaying
+                                  ? const LinearGradient(
+                                      colors: [Color(0xFF20C878), Color(0xFF10B981)],
+                                    )
+                                  : LinearGradient(
+                                      colors: [
+                                        Colors.white.withValues(alpha: 0.2),
+                                        Colors.white.withValues(alpha: 0.1),
+                                      ],
+                                    ),
+                              border: Border.all(
+                                color: editorState.isPlaying
+                                    ? Video365Colors.activeGreen
+                                    : Colors.white.withValues(alpha: 0.3),
+                                width: 1.5,
+                              ),
+                              boxShadow: editorState.isPlaying
+                                  ? [
+                                      BoxShadow(
+                                        color: Video365Colors.activeGreen.withValues(alpha: 0.45),
+                                        blurRadius: 12,
+                                        spreadRadius: 1,
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                            alignment: Alignment.center,
+                            child: Icon(
+                              editorState.isPlaying
+                                  ? Icons.pause_rounded
+                                  : Icons.play_arrow_rounded,
+                              size: 22,
+                              color: editorState.isPlaying
+                                  ? const Color(0xFF080A0E)
+                                  : Colors.white,
+                            ),
+                          ),
+                        ),
+
+                        // Right: Fullscreen / Aspect Ratio Toggle
+                        GestureDetector(
+                          onTap: () {
+                            editorNotifier.cycleAspectRatio();
+                            HapticFeedback.selectionClick();
+                          },
+                          behavior: HitTestBehavior.opaque,
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white.withValues(alpha: 0.08),
+                            ),
+                            alignment: Alignment.center,
+                            child: const Icon(
+                              Icons.fullscreen_rounded,
+                              size: 20,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // 4. Top-Left Aspect Ratio Indicator Badge
+                Positioned(
+                  left: 10,
+                  top: 10,
                   child: GestureDetector(
                     onTap: () => editorNotifier.cycleAspectRatio(),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.75),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.white24, width: 0.8),
+                        color: Colors.black.withValues(alpha: 0.6),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 0.8),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           const Icon(
                             Icons.crop_portrait_rounded,
-                            size: 13,
+                            size: 11,
                             color: Video365Colors.activeGreen,
                           ),
-                          const SizedBox(width: 5),
+                          const SizedBox(width: 4),
                           Text(
                             currentAspect.label,
                             style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 11,
+                              fontSize: 9.5,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
                         ],
-                      ),
-                    ),
-                  ),
-                ),
-
-                // 4. Bottom-Right Fullscreen (NO EMOJIS!)
-                Positioned(
-                  right: 12,
-                  bottom: 12,
-                  child: GestureDetector(
-                    onTap: () => editorNotifier.toggleFullscreen(),
-                    child: Container(
-                      width: 28,
-                      height: 28,
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.75),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: Colors.white24, width: 0.8),
-                      ),
-                      alignment: Alignment.center,
-                      child: const Icon(
-                        Icons.fullscreen_rounded,
-                        size: 16,
-                        color: Colors.white,
                       ),
                     ),
                   ),

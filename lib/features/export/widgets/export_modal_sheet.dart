@@ -220,9 +220,10 @@ class _ExportModalSheetState extends ConsumerState<ExportModalSheet> {
                     ),
                     SliderTheme(
                       data: SliderTheme.of(context).copyWith(
-                        activeTrackColor: Video365Colors.activeGreen,
-                        inactiveTrackColor: const Color(0xFF283244),
-                        thumbColor: Colors.white,
+                        activeTrackColor: const Color(0xFF00B4D8),
+                        inactiveTrackColor: const Color(0xFF1E2838),
+                        thumbColor: const Color(0xFF00B4D8),
+                        overlayColor: const Color(0xFF00B4D8).withValues(alpha: 0.2),
                         trackHeight: 3,
                       ),
                       child: Slider(
@@ -243,7 +244,7 @@ class _ExportModalSheetState extends ConsumerState<ExportModalSheet> {
 
                     const SizedBox(height: 24),
 
-                    // FPS Rate Slider Section
+                    // FPS Rate Slider Section (Matching Reference Image 1)
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -258,7 +259,7 @@ class _ExportModalSheetState extends ConsumerState<ExportModalSheet> {
                         Text(
                           '${_fpsRates[_selectedFpsIndex]} fps',
                           style: const TextStyle(
-                            color: Video365Colors.activeGreen,
+                            color: Color(0xFF00B4D8),
                             fontSize: 13,
                             fontWeight: FontWeight.w800,
                           ),
@@ -267,9 +268,10 @@ class _ExportModalSheetState extends ConsumerState<ExportModalSheet> {
                     ),
                     SliderTheme(
                       data: SliderTheme.of(context).copyWith(
-                        activeTrackColor: Video365Colors.activeGreen,
-                        inactiveTrackColor: const Color(0xFF283244),
-                        thumbColor: Colors.white,
+                        activeTrackColor: const Color(0xFF00B4D8),
+                        inactiveTrackColor: const Color(0xFF1E2838),
+                        thumbColor: const Color(0xFF00B4D8),
+                        overlayColor: const Color(0xFF00B4D8).withValues(alpha: 0.2),
                         trackHeight: 3,
                       ),
                       child: Slider(
@@ -311,19 +313,19 @@ class _ExportModalSheetState extends ConsumerState<ExportModalSheet> {
 
                     const SizedBox(height: 16),
 
-                    // Download / Export Button
+                    // Download / Export Button (Cyan Pill matching Reference Image 1)
                     GestureDetector(
                       onTap: _isExporting ? null : _startExport,
                       child: Container(
                         width: double.infinity,
-                        height: 48,
+                        height: 50,
                         decoration: BoxDecoration(
-                          color: Video365Colors.activeGreen,
-                          borderRadius: BorderRadius.circular(24),
+                          color: const Color(0xFF00B4D8),
+                          borderRadius: BorderRadius.circular(25),
                           boxShadow: [
                             BoxShadow(
-                              color: Video365Colors.activeGreen.withOpacity(0.35),
-                              blurRadius: 14,
+                              color: const Color(0xFF00B4D8).withValues(alpha: 0.4),
+                              blurRadius: 16,
                               offset: const Offset(0, 4),
                             ),
                           ],
@@ -332,7 +334,7 @@ class _ExportModalSheetState extends ConsumerState<ExportModalSheet> {
                         child: Text(
                           _isExporting ? 'Exporting...' : 'Download',
                           style: const TextStyle(
-                            color: Color(0xFF080A0E),
+                            color: Colors.white,
                             fontSize: 15,
                             fontWeight: FontWeight.w800,
                             letterSpacing: 0.5,

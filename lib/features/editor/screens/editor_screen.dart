@@ -14,7 +14,6 @@ import '../widgets/filters_drawer.dart';
 import '../widgets/media_import_sheet.dart';
 import '../widgets/motion_graphics_drawer.dart';
 import '../widgets/multi_track_timeline.dart';
-import '../widgets/playback_timecode_bar.dart';
 import '../widgets/speed_drawer.dart';
 import '../widgets/trim_drawer.dart';
 import '../widgets/video_preview_card.dart';
@@ -25,6 +24,8 @@ class EditorScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final editorState = ref.watch(editorProvider);
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+    final isTablet = MediaQuery.of(context).size.width > 700;
 
     return Scaffold(
       backgroundColor: Video365Colors.mainBg,
@@ -34,33 +35,65 @@ class EditorScreen extends ConsumerWidget {
             // Base Studio Layout
             Column(
               children: [
-                // 1. Top Navigation Bar: [✕] [↶ ↷] Title [↑ Export]
+                // 1. Top Navigation Bar: [< Back] [Untitle Project ✎] [✓ Export]
                 const EditorTopNavBar(),
 
-                // 2. Video Preview Card: Empty State OR Live Video with Overlays
-                const VideoPreviewCard(),
+                // 2. Responsive Work Area (Portrait Phone vs Landscape/Tablet Studio)
+                Expanded(
+                  child: (isLandscape || isTablet)
+                      ? Row(
+                          children: [
+                            // Left Pane: Video Preview Monitor with Floating Controls
+                            const SizedBox(
+                              width: 380,
+                              child: VideoPreviewCard(),
+                            ),
+                            // Right Pane: Multi-Track Timeline & Context Panels
+                            Expanded(
+                              child: Column(
+                                children: [
+                                  const Expanded(child: MultiTrackTimeline()),
+                                  if (editorState.activeTool == BottomTool.effects)
+                                    const EffectsDrawer()
+                                  else if (editorState.activeTool == BottomTool.filters)
+                                    const FiltersDrawer()
+                                  else if (editorState.activeTool == BottomTool.text)
+                                    const MotionGraphicsDrawer()
+                                  else if (editorState.activeTool == BottomTool.speed)
+                                    const SpeedDrawer()
+                                  else if (editorState.activeTool == BottomTool.trim)
+                                    const TrimDrawer(),
+                                ],
+                              ),
+                            ),
+                          ],
+                        )
+                      : Column(
+                          children: [
+                            // Top: Video Preview Card with Floating Glass Controls
+                            const VideoPreviewCard(),
 
-                // 3. Playback Controls & Timecode
-                const PlaybackTimecodeBar(),
+                            // Center: Multi-Track Timeline with In-Sync Needle & Zoom Controls
+                            const Expanded(
+                              child: MultiTrackTimeline(),
+                            ),
 
-                // 4. Multi-Track Timeline: FX, Text, Video, Audio, Voice
-                const Expanded(
-                  child: MultiTrackTimeline(),
+                            // Bottom: Contextual Active Tool Drawer (if open)
+                            if (editorState.activeTool == BottomTool.effects)
+                              const EffectsDrawer()
+                            else if (editorState.activeTool == BottomTool.filters)
+                              const FiltersDrawer()
+                            else if (editorState.activeTool == BottomTool.text)
+                              const MotionGraphicsDrawer()
+                            else if (editorState.activeTool == BottomTool.speed)
+                              const SpeedDrawer()
+                            else if (editorState.activeTool == BottomTool.trim)
+                              const TrimDrawer(),
+                          ],
+                        ),
                 ),
 
-                // 5. Contextual Active Tool Drawer (if open)
-                if (editorState.activeTool == BottomTool.effects)
-                  const EffectsDrawer()
-                else if (editorState.activeTool == BottomTool.filters)
-                  const FiltersDrawer()
-                else if (editorState.activeTool == BottomTool.text)
-                  const MotionGraphicsDrawer()
-                else if (editorState.activeTool == BottomTool.speed)
-                  const SpeedDrawer()
-                else if (editorState.activeTool == BottomTool.trim)
-                  const TrimDrawer(),
-
-                // 6. Contextual Bottom Toolbar
+                // 3. Bottom Toolbar (Text, Music, Stickers, Split, Filter, Effects, Speed, Captions, Wheel, Media)
                 const BottomToolBar(),
               ],
             ),
@@ -109,7 +142,7 @@ class EditorScreen extends ConsumerWidget {
                 child: AutoCaptionsSheet(),
               ),
 
-            // Modal Layer 4: Export & Render Sheet
+            // Modal Layer 4: Export & Render Sheet (Sliders for Resolution & FPS rate + Download button)
             if (editorState.isExportSheetOpen)
               const Positioned.fill(
                 child: ExportModalSheet(),
