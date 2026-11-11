@@ -197,8 +197,22 @@ class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
       _updatePlayerSource(null);
     }
 
-    // Sync playback state
+    // Find parent track of active video clip
+    TrackItem? activeVideoTrack;
+    if (activeVideoClip != null) {
+      for (final t in editorState.project.tracks) {
+        if (t.clips.any((c) => c.id == activeVideoClip!.id)) {
+          activeVideoTrack = t;
+          break;
+        }
+      }
+    }
+
+    // Sync playback state & volume for video
     if (_isInitialized && _controller != null) {
+      final isVideoMuted = editorState.isAudioMuted || (activeVideoTrack?.isMuted ?? false);
+      _controller!.setVolume(isVideoMuted ? 0.0 : (activeVideoClip?.volume ?? 1.0));
+
       if (editorState.isPlaying && !_controller!.value.isPlaying) {
         _controller!.play();
       } else if (!editorState.isPlaying && _controller!.value.isPlaying) {
@@ -230,7 +244,15 @@ class _VideoPreviewCardState extends ConsumerState<VideoPreviewCard> {
 
     // Sync audio playback state & volume
     if (_isAudioInitialized && _audioController != null && activeAudioClip != null) {
-      final targetVolume = editorState.isAudioMuted ? 0.0 : activeAudioClip.volume;
+      TrackItem? activeAudioTrack;
+      for (final t in editorState.project.tracks) {
+        if (t.clips.any((c) => c.id == activeAudioClip!.id)) {
+          activeAudioTrack = t;
+          break;
+        }
+      }
+      final isAudioTrackMuted = editorState.isAudioMuted || (activeAudioTrack?.isMuted ?? false);
+      final targetVolume = isAudioTrackMuted ? 0.0 : activeAudioClip.volume;
       _audioController!.setVolume(targetVolume);
 
       if (editorState.isPlaying && !_audioController!.value.isPlaying) {

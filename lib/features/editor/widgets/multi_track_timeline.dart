@@ -8,10 +8,10 @@ import '../../../providers/editor_provider.dart';
 import 'clip_property_panel.dart';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const double _kTrackHeaderWidth = 54.0;
-const double _kTrackHeight = 48.0;
-const double _kAudioTrackHeight = 42.0;
-const double _kSmallTrackHeight = 38.0;
+const double _kTrackHeaderWidth = 66.0;
+const double _kTrackHeight = 52.0;
+const double _kAudioTrackHeight = 48.0;
+const double _kSmallTrackHeight = 44.0;
 const double _kRulerHeight = 26.0;
 const double _kBasePixelsPerSecond = 60.0;
 
@@ -702,69 +702,117 @@ class _TrackHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Container(
-        height: height,
-        margin: const EdgeInsets.only(bottom: 2),
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-        decoration: BoxDecoration(
-          color: isSelected ? _trackColor.withValues(alpha: 0.22) : const Color(0xFF0D1117),
-          border: Border(
-            right: BorderSide(color: _trackColor, width: 3.0),
-            bottom: const BorderSide(color: Color(0xFF1A2030), width: 1),
+    return Container(
+      height: height,
+      margin: const EdgeInsets.only(bottom: 2),
+      decoration: BoxDecoration(
+        color: isSelected ? _trackColor.withValues(alpha: 0.22) : const Color(0xFF0D1117),
+        border: Border(
+          right: BorderSide(
+            color: track.isLocked ? const Color(0xFFF59E0B) : _trackColor,
+            width: 3.0,
           ),
+          bottom: const BorderSide(color: Color(0xFF1A2030), width: 1),
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Track Type Icon & Name
-            Row(
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // 1. Track Type Icon & Name (Click to select track)
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              HapticFeedback.selectionClick();
+              onTap();
+            },
+            child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(track.type.icon, size: 12, color: _trackColor),
+                Icon(track.type.icon, size: 11, color: track.isLocked ? const Color(0xFFF59E0B) : _trackColor),
                 const SizedBox(width: 4),
-                Flexible(
-                  child: Text(
-                    track.name,
-                    style: TextStyle(
-                      color: isSelected ? Colors.white : const Color(0xFF94A3B8),
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w800,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                Text(
+                  track.name,
+                  style: TextStyle(
+                    color: isSelected ? Colors.white : const Color(0xFF94A3B8),
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 3),
-            // Track Quick Toggles: Mute & Lock
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                GestureDetector(
-                  onTap: onMute,
+          ),
+          const SizedBox(height: 2),
+
+          // 2. Track Quick Toggles: Mute & Lock with generous touch targets (24x20 each)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Mute Button (Volume toggle with tactile response)
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  HapticFeedback.mediumImpact();
+                  onMute();
+                },
+                child: Container(
+                  width: 24,
+                  height: 20,
+                  decoration: BoxDecoration(
+                    color: track.isMuted
+                        ? const Color(0xFFEF4444).withValues(alpha: 0.3)
+                        : Colors.white.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: track.isMuted
+                          ? const Color(0xFFEF4444)
+                          : Colors.white.withValues(alpha: 0.15),
+                      width: track.isMuted ? 1.2 : 0.8,
+                    ),
+                  ),
+                  alignment: Alignment.center,
                   child: Icon(
                     track.isMuted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
-                    size: 11,
-                    color: track.isMuted ? const Color(0xFFEF4444) : const Color(0xFF475569),
+                    size: 12,
+                    color: track.isMuted ? const Color(0xFFEF4444) : Colors.white70,
                   ),
                 ),
-                const SizedBox(width: 6),
-                GestureDetector(
-                  onTap: onLock,
+              ),
+              const SizedBox(width: 4),
+
+              // Lock Button (Lock track edits with tactile response)
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  HapticFeedback.mediumImpact();
+                  onLock();
+                },
+                child: Container(
+                  width: 24,
+                  height: 20,
+                  decoration: BoxDecoration(
+                    color: track.isLocked
+                        ? const Color(0xFFF59E0B).withValues(alpha: 0.3)
+                        : Colors.white.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: track.isLocked
+                          ? const Color(0xFFF59E0B)
+                          : Colors.white.withValues(alpha: 0.15),
+                      width: track.isLocked ? 1.2 : 0.8,
+                    ),
+                  ),
+                  alignment: Alignment.center,
                   child: Icon(
                     track.isLocked ? Icons.lock_rounded : Icons.lock_open_rounded,
-                    size: 11,
-                    color: track.isLocked ? const Color(0xFFF59E0B) : const Color(0xFF475569),
+                    size: 12,
+                    color: track.isLocked ? const Color(0xFFF59E0B) : Colors.white70,
                   ),
                 ),
-              ],
-            ),
-          ],
-        ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -841,9 +889,13 @@ class _TrackClipRow extends StatelessWidget {
       height: _height,
       width: totalWidth,
       margin: const EdgeInsets.only(bottom: 2),
-      decoration: const BoxDecoration(
-        color: Color(0xFF0D1117),
-        border: Border(bottom: BorderSide(color: Color(0xFF1A2030), width: 1)),
+      decoration: BoxDecoration(
+        color: track.isLocked
+            ? const Color(0xFF16140F)
+            : track.isMuted
+                ? const Color(0xFF160E0E)
+                : const Color(0xFF0D1117),
+        border: const Border(bottom: BorderSide(color: Color(0xFF1A2030), width: 1)),
       ),
       child: isHidden
           ? const SizedBox()
@@ -863,20 +915,62 @@ class _TrackClipRow extends StatelessWidget {
                         bottom: 2,
                         width: width,
                         child: GestureDetector(
-                          onTap: () => onClipTap(clip.id),
+                          onTap: () {
+                            if (track.isLocked) {
+                              HapticFeedback.lightImpact();
+                              ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Track "${track.name}" is locked. Unlock to edit.'),
+                                  duration: const Duration(seconds: 1),
+                                  backgroundColor: const Color(0xFFF59E0B),
+                                ),
+                              );
+                              return;
+                            }
+                            onClipTap(clip.id);
+                          },
                           child: _ClipBlock(
                             clip: clip,
                             width: width,
                             height: _height - 4,
-                            isSelected: isSelected,
+                            isSelected: isSelected && !track.isLocked,
+                            isLocked: track.isLocked,
+                            isMuted: track.isMuted,
                             trackType: track.type,
                             ppm: ppm,
                           ),
                         ),
                       );
                     }),
-                    // Render Transition Cut Buttons above clips
-                    ...seamButtons,
+                    // Render Transition Cut Buttons above clips (only when track is unlocked)
+                    if (!track.isLocked) ...seamButtons,
+
+                    // Locked Track Watermark Overlay
+                    if (track.isLocked)
+                      Positioned(
+                        right: 12,
+                        top: 0,
+                        bottom: 0,
+                        child: IgnorePointer(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.lock_rounded, size: 12, color: Color(0xFFF59E0B)),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${track.name} LOCKED',
+                                style: const TextStyle(
+                                  color: Color(0xFFF59E0B),
+                                  fontSize: 8.5,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                   ],
                 ),
     );
@@ -928,6 +1022,8 @@ class _ClipBlock extends ConsumerWidget {
   final double width;
   final double height;
   final bool isSelected;
+  final bool isLocked;
+  final bool isMuted;
   final TrackType trackType;
   final double ppm;
 
@@ -936,6 +1032,8 @@ class _ClipBlock extends ConsumerWidget {
     required this.width,
     required this.height,
     required this.isSelected,
+    this.isLocked = false,
+    this.isMuted = false,
     required this.trackType,
     required this.ppm,
   });
@@ -959,13 +1057,25 @@ class _ClipBlock extends ConsumerWidget {
     else if (isText) baseColor = const Color(0xFF6D28D9); // Violet
     else baseColor = const Color(0xFFD97706); // Warm Amber
 
-    return Container(
+    if (isMuted) {
+      baseColor = const Color(0xFF332025);
+    } else if (isLocked) {
+      baseColor = const Color(0xFF2E2416);
+    }
+
+    final block = Container(
       width: width,
       decoration: BoxDecoration(
         color: baseColor,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: isSelected ? Colors.white : baseColor.withValues(alpha: 0.6),
+          color: isLocked
+              ? const Color(0xFFF59E0B).withValues(alpha: 0.6)
+              : isSelected
+                  ? Colors.white
+                  : isMuted
+                      ? const Color(0xFFEF4444).withValues(alpha: 0.4)
+                      : baseColor.withValues(alpha: 0.6),
           width: isSelected ? 2.0 : 1.0,
         ),
         boxShadow: isSelected
@@ -984,7 +1094,11 @@ class _ClipBlock extends ConsumerWidget {
           if (isAudio)
             Positioned.fill(
               child: CustomPaint(
-                painter: _WaveformPainter(color: Colors.white.withValues(alpha: 0.45)),
+                painter: _WaveformPainter(
+                  color: isMuted
+                      ? const Color(0xFFEF4444).withValues(alpha: 0.3)
+                      : Colors.white.withValues(alpha: 0.45),
+                ),
               ),
             ),
 
@@ -1022,34 +1136,50 @@ class _ClipBlock extends ConsumerWidget {
 
           // Clip Content Info
           Positioned(
-            left: isSelected ? 18 : 8,
+            left: (isSelected && !isLocked) ? 18 : 8,
             top: 0,
             bottom: 0,
-            right: isSelected ? 18 : 8,
+            right: (isSelected && !isLocked) ? 18 : 8,
             child: Row(
               children: [
-                // Duration Badge: "14 Sec" (Matching Reference Image 5)
+                // Duration Badge
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                   decoration: BoxDecoration(
                     color: Colors.black.withValues(alpha: 0.35),
                     borderRadius: BorderRadius.circular(4),
                   ),
-                  child: Text(
-                    _formatDuration(clip.durationMs),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 8,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isLocked) ...[
+                        const Icon(Icons.lock_rounded, size: 8, color: Color(0xFFF59E0B)),
+                        const SizedBox(width: 2),
+                      ] else if (isMuted) ...[
+                        const Icon(Icons.volume_off_rounded, size: 8, color: Color(0xFFEF4444)),
+                        const SizedBox(width: 2),
+                      ],
+                      Text(
+                        _formatDuration(clip.durationMs),
+                        style: TextStyle(
+                          color: isLocked
+                              ? const Color(0xFFF59E0B)
+                              : isMuted
+                                  ? const Color(0xFFEF4444)
+                                  : Colors.white,
+                          fontSize: 8,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(width: 5),
                 Flexible(
                   child: Text(
                     clip.textContent ?? clip.title,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: isMuted ? Colors.white54 : Colors.white,
                       fontSize: 10,
                       fontWeight: FontWeight.w700,
                       letterSpacing: -0.2,
@@ -1062,8 +1192,8 @@ class _ClipBlock extends ConsumerWidget {
             ),
           ),
 
-          // Selected Handles: Left White Grab Handle (<)
-          if (isSelected)
+          // Selected Handles: Left White Grab Handle (<) - only when unlocked
+          if (isSelected && !isLocked)
             Positioned(
               left: 0,
               top: 0,
@@ -1090,8 +1220,8 @@ class _ClipBlock extends ConsumerWidget {
               ),
             ),
 
-          // Selected Handles: Right White Grab Handle (>)
-          if (isSelected)
+          // Selected Handles: Right White Grab Handle (>) - only when unlocked
+          if (isSelected && !isLocked)
             Positioned(
               right: 0,
               top: 0,
@@ -1117,32 +1247,14 @@ class _ClipBlock extends ConsumerWidget {
                 ),
               ),
             ),
-
-          // Horizontal Drag to Move Clip Body
-          Positioned(
-            left: isSelected ? 16 : 0,
-            right: isSelected ? 16 : 0,
-            top: 0,
-            bottom: 0,
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onHorizontalDragUpdate: (details) {
-                final deltaMs = details.primaryDelta! / ppm;
-                notifier.moveClip(clip.id, clip.startMs + deltaMs);
-              },
-              onLongPress: () {
-                HapticFeedback.heavyImpact();
-                notifier.selectClip(clip.id, trackId: clip.trackId);
-                notifier.setBottomTool(BottomTool.trim);
-              },
-              onDoubleTap: () {
-                notifier.selectClip(clip.id, trackId: clip.trackId);
-              },
-            ),
-          ),
         ],
       ),
     );
+
+    if (isMuted) {
+      return Opacity(opacity: 0.55, child: block);
+    }
+    return block;
   }
 }
 

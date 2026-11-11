@@ -328,6 +328,16 @@ class EditorNotifier extends Notifier<EditorState> {
 
   void toggleTrackLock(String trackId) {
     _mapTracks((t) => t.id == trackId ? t.copyWith(isLocked: !t.isLocked) : t);
+    // If the active selected clip is on this newly locked track, clear selection
+    if (state.selectedClipId != null) {
+      final target = state.project.tracks.firstWhere(
+        (t) => t.id == trackId,
+        orElse: () => const TrackItem(id: '', type: TrackType.video, name: ''),
+      );
+      if (target.isLocked && target.clips.any((c) => c.id == state.selectedClipId)) {
+        state = state.copyWith(clearSelectedClip: true);
+      }
+    }
   }
 
   void toggleTrackVisibility(String trackId) {
@@ -553,6 +563,7 @@ class EditorNotifier extends Notifier<EditorState> {
 
   void updateClip(String clipId, ClipItem Function(ClipItem) fn) {
     final updatedTracks = state.project.tracks.map((track) {
+      if (track.isLocked) return track;
       final idx = track.clips.indexWhere((c) => c.id == clipId);
       if (idx == -1) return track;
       final clips = List<ClipItem>.from(track.clips);
@@ -707,8 +718,14 @@ class EditorNotifier extends Notifier<EditorState> {
   void splitSelectedClip() {
     final clipId = state.selectedClipId;
     if (clipId == null) return;
+    final parent = state.project.tracks.firstWhere(
+      (t) => t.clips.any((c) => c.id == clipId),
+      orElse: () => const TrackItem(id: '', type: TrackType.video, name: ''),
+    );
+    if (parent.isLocked) return;
     _recordHistory();
     final updatedTracks = state.project.tracks.map((track) {
+      if (track.isLocked) return track;
       final idx = track.clips.indexWhere((c) => c.id == clipId);
       if (idx == -1) return track;
       final clip = track.clips[idx];
@@ -733,8 +750,14 @@ class EditorNotifier extends Notifier<EditorState> {
   void deleteSelectedClip() {
     final clipId = state.selectedClipId;
     if (clipId == null) return;
+    final parent = state.project.tracks.firstWhere(
+      (t) => t.clips.any((c) => c.id == clipId),
+      orElse: () => const TrackItem(id: '', type: TrackType.video, name: ''),
+    );
+    if (parent.isLocked) return;
     _recordHistory();
     final updatedTracks = state.project.tracks.map((t) {
+      if (t.isLocked) return t;
       return t.copyWith(clips: t.clips.where((c) => c.id != clipId).toList());
     }).toList();
     // Also remove associated transitions
@@ -753,10 +776,11 @@ class EditorNotifier extends Notifier<EditorState> {
   }
 
   void duplicateClip(String clipId) {
-    _recordHistory();
     for (final track in state.project.tracks) {
+      if (track.isLocked) continue;
       final idx = track.clips.indexWhere((c) => c.id == clipId);
       if (idx != -1) {
+        _recordHistory();
         final orig = track.clips[idx];
         final cloned = orig.copyWith(
           id: 'clip_${DateTime.now().millisecondsSinceEpoch}',
